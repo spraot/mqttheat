@@ -1,18 +1,11 @@
 #!/usr/bin/env python3
 
-#MQTT format based on
-#https://www.home-assistant.io/docs/mqtt/discovery/
-
-#MQTT lib
-#https://pypi.org/project/paho-mqtt/
-
 import os
 import sys
 import datetime
 import json
 import yaml
 from statistics import mean
-import traceback
 import paho.mqtt.client as mqtt
 import time
 import threading
@@ -191,7 +184,7 @@ class MqttHeatControl():
                     logging.info('Room {}: setting cooling level to {} (current temp is {})'.format(room['name'], cooling_level, temp_str))
                     self.mqttclient.publish(room['output_cool_topic'], payload='{:0.0f}'.format(cooling_level), qos=1, retain=False)
 
-            heating_levels = [r['control'].heating_level for r in self.rooms.values()]
+            heating_levels = [r['control'].heating_level for r in self.rooms.values() if 'output_heat_topic' in r]
             pump_state = max(heating_levels) > 20 or mean(heating_levels) > 5
             logging.info('Setting pump state to {}'.format(pump_state))
             self.mqttclient.publish(self.pump_topic, payload='ON' if pump_state else 'OFF', qos=1, retain=False)          

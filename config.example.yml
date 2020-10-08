@@ -4,8 +4,10 @@ mqtt_server_port: 1883
 mqtt_server_user: mqtt
 mqtt_server_password: 123abc
 
-switches:
-  - id: office_lights
-    name: Office
-    output_id: O_1_1
-    md-icon: ceiling-light
+pump: revpi/io/heat_pump/set
+
+rooms:
+  office:
+    sensors:
+      - zigbee2mqtt/office/temp_sensor
+    output_heat_topic: revpi/io/office/heat/set
