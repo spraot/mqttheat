@@ -10,6 +10,6 @@ WORKDIR /app
 COPY requirements.txt ./
 RUN pip install -r requirements.txt
 
-COPY mqtt_io.py ./
+COPY src/* ./
 
-CMD [ "python", "mqtt_io.py", "/config.yml" ]
+CMD [ "python", "mqtt_heat.py", "/config.yml" ]
