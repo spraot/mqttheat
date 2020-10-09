@@ -110,7 +110,8 @@ class MqttHeatControl():
             room['mqtt_state_topic'] = '{}/{}/state'.format(self.topic_prefix, room['id'])
             room['mqtt_availability_topic'] = '{}/{}/availability'.format(self.topic_prefix, room['id'])
 
-            room['control'] = RoomControl(room['name'])
+            room['control'] = RoomControl(room['name'], can_heat='output_heat_topic' in room, can_cool='output_cool_topic' in room)
+            room['control'].set_state(room)
 
     def configure_sensors(self):
         for room in self.rooms.values():
@@ -175,19 +176,18 @@ class MqttHeatControl():
 
                 self.mqtt_broadcast_state(room)
 
-                if 'output_heat_topic' in room:
+                if room['control'].can_heat:
                     heating_level = room['control'].heating_level
                     logging.info('Room {}: setting heat level to {} (current temp is {})'.format(room['name'], heating_level, temp_str))
                     self.mqttclient.publish(room['output_heat_topic'], payload='{:0.0f}'.format(heating_level), qos=1, retain=False)
 
-                if 'output_cool_topic' in room:
+                if room['control'].can_cool:
                     cooling_level = room['control'].cooling_level
                     logging.info('Room {}: setting cooling level to {} (current temp is {})'.format(room['name'], cooling_level, temp_str))
                     self.mqttclient.publish(room['output_cool_topic'], payload='{:0.0f}'.format(cooling_level), qos=1, retain=False)
 
             heating_levels = [r['control'].heating_level for r in self.rooms.values() if 'output_heat_topic' in r]
             pump_state = max(heating_levels) > 20 or mean(heating_levels) > 5
-            logging.info('Setting pump state to {}'.format(pump_state))
             self._set_pump_state(pump_state)
 
             # Cycle pump on daily basis
@@ -201,15 +201,16 @@ class MqttHeatControl():
             time.sleep(self.update_freq - (datetime.datetime.now() - start).total_seconds())
 
     def _set_pump_state(self, state):
+        logging.info('Setting pump state to {}'.format(state))
         self.mqttclient.publish(self.pump_topic, payload='ON' if state else 'OFF', qos=1, retain=False)
 
     def programend(self):
         logging.info('stopping')
 
         for room in self.rooms.values():
-            if 'output_heat_topic' in room:
+            if room['control'].can_heat:
                 self.mqttclient.publish(room['output_heat_topic'], payload=0, qos=0, retain=False)
-            if 'output_cool_topic' in room:
+            if room['control'].can_cool:
                 self.mqttclient.publish(room['output_cool_topic'], payload=0, qos=0, retain=False)
             self.mqtt_broadcast_room_availability(room, 'offline')
         self.mqttclient.publish(self.pump_topic, payload='OFF', qos=0, retain=False)   
