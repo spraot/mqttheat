@@ -30,6 +30,7 @@ class MqttHeatControl():
     mqtt_server_password = ''
     pump_topic = ''
     update_freq = 5*60
+    _last_pump_cycle = None
 
     default_room = {
         'md-icon': 'home-thermometer',
@@ -187,9 +188,20 @@ class MqttHeatControl():
             heating_levels = [r['control'].heating_level for r in self.rooms.values() if 'output_heat_topic' in r]
             pump_state = max(heating_levels) > 20 or mean(heating_levels) > 5
             logging.info('Setting pump state to {}'.format(pump_state))
-            self.mqttclient.publish(self.pump_topic, payload='ON' if pump_state else 'OFF', qos=1, retain=False)          
+            self._set_pump_state(pump_state)
+
+            # Cycle pump on daily basis
+            if pump_state or not self._last_pump_cycle or self._last_pump_cycle < datetime.datetime.now() - datetime.timedelta(days=1):
+                self._last_pump_cycle = datetime.datetime.now()
+                if not pump_state:
+                    self._set_pump_state(True)
+                    time.sleep(30)
+                    self._set_pump_state(False)
 
             time.sleep(self.update_freq - (datetime.datetime.now() - start).total_seconds())
+
+    def _set_pump_state(self, state):
+        self.mqttclient.publish(self.pump_topic, payload='ON' if state else 'OFF', qos=1, retain=False)
 
     def programend(self):
         logging.info('stopping')
