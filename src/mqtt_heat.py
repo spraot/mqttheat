@@ -14,10 +14,9 @@ import atexit
 from room_control import RoomControl, modes
 from sensor import TempSensor
 
-TEMP_COMMAND = 1
-MODE_COMMAND = 2
 ROOM_STATE = 3
-SENSOR_MSG = 4
+ROOM_STATE_SET = 4
+SENSOR_MSG = 5
 
 class MqttHeatControl():
 
@@ -54,8 +53,7 @@ class MqttHeatControl():
 
         #Construct map for fast indexing
         for room in self.rooms.values():
-            self.mqtt_topic_map[room['mqtt_temp_command_topic']] = (TEMP_COMMAND, room)
-            self.mqtt_topic_map[room['mqtt_mode_command_topic']] = (MODE_COMMAND, room)
+            self.mqtt_topic_map[room['mqtt_set_state_topic']] = (ROOM_STATE_SET, room)
             self.mqtt_topic_map[room['mqtt_state_topic']] = (ROOM_STATE, room)
 
         for topic, sensor in self.sensors.items():
@@ -105,8 +103,7 @@ class MqttHeatControl():
                 raise KeyError('Cannot load configuration: cannot find adjacent room {} for room {}'.format(e, room['name']))
 
             room['mqtt_config_topic'] = '{}/room/{}/config'.format(self.homeassistant_prefix, room['id'])
-            room['mqtt_mode_command_topic'] = '{}/{}/mode/set'.format(self.topic_prefix, room['id'])
-            room['mqtt_temp_command_topic'] = '{}/{}/temperature/set'.format(self.topic_prefix, room['id'])
+            room['mqtt_set_state_topic'] = '{}/{}/set'.format(self.topic_prefix, room['id'])
             room['mqtt_state_topic'] = '{}/{}/state'.format(self.topic_prefix, room['id'])
             room['mqtt_availability_topic'] = '{}/{}/availability'.format(self.topic_prefix, room['id'])
 
@@ -123,8 +120,8 @@ class MqttHeatControl():
     def configure_mqtt_for_room(self, room):
         room_configuration = {
             'name': room['name'],
-            'mode_command_topic': room['mqtt_mode_command_topic'],
-            'temperature_command_topic': room['mqtt_temp_command_topic'],
+#            'mode_command_topic': room['mqtt_mode_command_topic'],
+#            'temperature_command_topic': room['mqtt_temp_command_topic'],
             'state_topic': room['mqtt_state_topic'],
             'availability_topic': room['mqtt_availability_topic'],
             'device': {'identifiers': room['id']},
@@ -162,7 +159,7 @@ class MqttHeatControl():
         logging.info('started')
 
     def main(self):
-        time.sleep(2)
+        time.sleep(10)
         while True:
             start = datetime.datetime.now()
             
@@ -170,7 +167,7 @@ class MqttHeatControl():
                 room['control'].update()
 
                 try:
-                    temp_str = '{:0.1f}'.format(room['control'].get_temp())
+                    temp_str = '{:0.1f}'.format(room['control'].get_temperature())
                 except TypeError:
                     temp_str = 'None'
 
@@ -240,22 +237,12 @@ class MqttHeatControl():
 
             msg_obj = self.mqtt_topic_map[str(msg.topic)]
 
-            if msg_obj[0] == ROOM_STATE and msg.retain:
+            if msg_obj[0] == ROOM_STATE_SET or msg_obj[0] == ROOM_STATE and msg.retain:
                 room = msg_obj[1]
-                logging.debug('Received retained state from MQTT for room {}: {}'.format(room['name'], payload_as_string))
+                logging.debug('Received state from MQTT for room {}: {}'.format(room['name'], payload_as_string))
                 room['control'].set_state(json.loads(payload_as_string))
-
-            if msg_obj[0] == TEMP_COMMAND:
-                room = msg_obj[1]
-                logging.info('Updating set temp in room {} to {}'.format(room['name'], payload_as_string))
-                room['control'].set_temp = float(payload_as_string)
-                self.mqtt_broadcast_state(room)
-
-            if msg_obj[0] == MODE_COMMAND:
-                room = msg_obj[1]
-                logging.info('Updating mode in room {} to {}'.format(room['name'], payload_as_string))
-                room['control'].update_mode(payload_as_string)
-                self.mqtt_broadcast_state(room)
+                if msg_obj[0] == ROOM_STATE_SET:
+                    self.mqtt_broadcast_state(room)
 
             if msg_obj[0] == SENSOR_MSG:
                 sensor = msg_obj[1]

@@ -25,7 +25,7 @@ class TempSensor():
     def is_connected(self):
         return self.__last_seen is not None and self.__last_seen > (datetime.datetime.now() - datetime.timedelta(seconds=self.timeout))
 
-    def get_temp(self):
+    def get_temperature(self):
         return self.__temp if self.is_connected() else None
 
     def get_humidity(self):
