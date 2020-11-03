@@ -14,6 +14,8 @@ import atexit
 from room_control import RoomControl, modes
 from sensor import TempSensor
 
+ROOM_TEMP_SET = 1
+ROOM_MODE_SET = 2
 ROOM_STATE = 3
 ROOM_STATE_SET = 4
 SENSOR_MSG = 5
@@ -30,9 +32,9 @@ class MqttHeatControl():
     pump_topic = ''
     update_freq = 5*60
     _last_pump_cycle = None
+    unique_id_suffix = '_mqttheat'
 
     default_room = {
-        'md-icon': 'home-thermometer',
         'adjacent_rooms': [],
         'modes': modes[:]
     }
@@ -50,11 +52,14 @@ class MqttHeatControl():
 
         self.load_config()
         self.configure_sensors()
+        self.make_all_room()
 
         #Construct map for fast indexing
         for room in self.rooms.values():
             self.mqtt_topic_map[room['mqtt_set_state_topic']] = (ROOM_STATE_SET, room)
             self.mqtt_topic_map[room['mqtt_state_topic']] = (ROOM_STATE, room)
+            self.mqtt_topic_map[room['mqtt_mode_command_topic']] = (ROOM_MODE_SET, room)
+            self.mqtt_topic_map[room['mqtt_temp_command_topic']] = (ROOM_TEMP_SET, room)
 
         for topic, sensor in self.sensors.items():
             self.mqtt_topic_map[topic] = (SENSOR_MSG, sensor)
@@ -79,13 +84,14 @@ class MqttHeatControl():
         with open(self.config_file, 'r') as f:
             config = yaml.safe_load(f)
 
-        for key in ['topic_prefix', 'homeassistant_prefix', 'mqtt_server_ip', 'mqtt_server_port', 'mqtt_server_user', 'mqtt_server_password', 'rooms']:
+        for key in ['topic_prefix', 'homeassistant_prefix', 'mqtt_server_ip', 'mqtt_server_port', 'mqtt_server_user', 'mqtt_server_password', 'rooms', 'unique_id_suffix']:
             try:
                 self.__setattr__(key, config[key])
             except KeyError:
                 pass
 
         self.pump_topic = config['pump']
+        self.availability_topic = self.topic_prefix + '/bridge/state'
 
         for id, room in self.rooms.items():
             room['id'] = id
@@ -97,18 +103,30 @@ class MqttHeatControl():
                 if not k in room:
                     room[k] = v
 
+            if not 'unique_id' in room:
+                room['unique_id'] = room["id"].replace('/', '_')
+            room['unique_id'] += self.unique_id_suffix
+
             try:
                 room['adjacent_rooms'] = [self.rooms[adj] for adj in room['adjacent_rooms']]
             except KeyError as e:
                 raise KeyError('Cannot load configuration: cannot find adjacent room {} for room {}'.format(e, room['name']))
 
-            room['mqtt_config_topic'] = '{}/room/{}/config'.format(self.homeassistant_prefix, room['id'])
+            room['mqtt_config_topic'] = '{}/climate/{}/config'.format(self.homeassistant_prefix, room['unique_id'])
             room['mqtt_set_state_topic'] = '{}/{}/set'.format(self.topic_prefix, room['id'])
+            room['mqtt_temp_command_topic'] = '{}/{}/temp/set'.format(self.topic_prefix, room['id'])
+            room['mqtt_mode_command_topic'] = '{}/{}/mode/set'.format(self.topic_prefix, room['id'])
             room['mqtt_state_topic'] = '{}/{}/state'.format(self.topic_prefix, room['id'])
             room['mqtt_availability_topic'] = '{}/{}/availability'.format(self.topic_prefix, room['id'])
 
             room['control'] = RoomControl(room['name'], can_heat='output_heat_topic' in room, can_cool='output_cool_topic' in room)
             room['control'].set_state(room)
+
+            room['modes'] = ['auto', 'off']
+            if room['control'].can_cool:
+                room['modes'].append('cool')
+            if room['control'].can_heat:
+                room['modes'].append('heat')
 
     def configure_sensors(self):
         for room in self.rooms.values():
@@ -120,23 +138,37 @@ class MqttHeatControl():
     def configure_mqtt_for_room(self, room):
         room_configuration = {
             'name': room['name'],
-#            'mode_command_topic': room['mqtt_mode_command_topic'],
-#            'temperature_command_topic': room['mqtt_temp_command_topic'],
-            'state_topic': room['mqtt_state_topic'],
-            'availability_topic': room['mqtt_availability_topic'],
-            'device': {'identifiers': room['id']},
-            'modes': room['modes']
+            'mode_command_topic': room['mqtt_mode_command_topic'],
+            'temperature_command_topic': room['mqtt_temp_command_topic'],
+            'json_attributes_topic': room['mqtt_state_topic'],
+            'mode_state_topic': room['mqtt_state_topic'],
+            'mode_state_template': '{{ value_json.mode }}',
+            'temperature_state_topic': room['mqtt_state_topic'],
+            'temperature_state_template': '{{ value_json.temperature }}',
+            'current_temperature_topic': room['mqtt_state_topic'],
+            'current_temperature_template': '{{ value_json.current_temperature }}',
+            'temperature_unit': 'C',
+            'temp_step': 0.1,
+            'initial': 22.5,
+            "availability": [
+                {'topic': self.availability_topic},
+                {'topic': room["mqtt_availability_topic"]},
+            ],
+            "device": {
+                "identifiers": [room["unique_id"]],
+                "manufacturer": "KUNBUS GmbH",
+                "model": "RevPi Digital IO",
+                "name": room['name'],
+                "sw_version": "mqttio"
+            },
+            'modes': room['modes'],
+            "unique_id": room["unique_id"]
         }
 
         try:
             room_configuration['unique_id'] = room['unique_id']
         except KeyError:
             room_configuration['unique_id'] = room['id']
-
-        try:
-            room_configuration['icon'] = 'mdi:' + room['md-icon']
-        except KeyError:
-            pass
 
         json_conf = json.dumps(room_configuration)
         logging.debug('Broadcasting homeassistant configuration for room ' + room['name'] + ': ' + json_conf)
@@ -187,6 +219,8 @@ class MqttHeatControl():
             pump_state = max(heating_levels) > 20 or mean(heating_levels) > 5
             self._set_pump_state(pump_state)
 
+            self.mqtt_broadcast_state(self.room_all)
+
             # Cycle pump on daily basis
             if pump_state or not self._last_pump_cycle or self._last_pump_cycle < datetime.datetime.now() - datetime.timedelta(days=1):
                 self._last_pump_cycle = datetime.datetime.now()
@@ -204,6 +238,7 @@ class MqttHeatControl():
     def programend(self):
         logging.info('stopping')
 
+        self.mqttclient.publish(self.availability_topic, payload="offline", qos=0, retain=True)
         for room in self.rooms.values():
             if room['control'].can_heat:
                 self.mqttclient.publish(room['output_heat_topic'], payload=0, qos=0, retain=False)
@@ -230,6 +265,8 @@ class MqttHeatControl():
             for topic in self.mqtt_topic_map.keys():
                 self.mqttclient.subscribe(topic)
 
+        self.mqttclient.publish(self.availability_topic, payload="online", qos=0, retain=True)
+
     def mqtt_on_message(self, client, userdata, msg):
         try:
             payload_as_string = msg.payload.decode('utf-8')
@@ -237,12 +274,27 @@ class MqttHeatControl():
 
             msg_obj = self.mqtt_topic_map[str(msg.topic)]
 
-            if msg_obj[0] == ROOM_STATE_SET or msg_obj[0] == ROOM_STATE and msg.retain:
+            def set_state(room, state, do_broadcast=True):
                 room = msg_obj[1]
-                logging.debug('Received state from MQTT for room {}: {}'.format(room['name'], payload_as_string))
-                room['control'].set_state(json.loads(payload_as_string))
-                if msg_obj[0] == ROOM_STATE_SET:
+                room['control'].set_state(state)
+                if do_broadcast:
                     self.mqtt_broadcast_state(room)
+
+            if msg_obj[0] == ROOM_MODE_SET:
+                logging.info('Received mode command from MQTT for room {}: {}'.format(msg_obj[1]['name'], payload_as_string))
+                set_state(msg_obj[1], {'mode': payload_as_string})
+                
+            if msg_obj[0] == ROOM_TEMP_SET:
+                logging.info('Received temperature command from MQTT for room {}: {}'.format(msg_obj[1]['name'], payload_as_string))
+                set_state(msg_obj[1], {'set_temperature': float(payload_as_string)})
+
+            if msg_obj[0] == ROOM_STATE_SET:
+                logging.info('Received state from MQTT for room {}: {}'.format(msg_obj[1]['name'], payload_as_string))
+                set_state(msg_obj[1], json.loads(payload_as_string))
+
+            if msg_obj[0] == ROOM_STATE and msg.retain:
+                logging.info('Received retained state from MQTT for room {}: {}'.format(msg_obj[1]['name'], payload_as_string))
+                set_state(msg_obj[1], json.loads(payload_as_string), False)
 
             if msg_obj[0] == SENSOR_MSG:
                 sensor = msg_obj[1]
@@ -260,7 +312,35 @@ class MqttHeatControl():
         topic = room['mqtt_state_topic']
         state = json.dumps(room['control'].get_state())
         logging.debug('Broadcasting MQTT message on topic: ' + topic + ', value: ' + state)
-        self.mqttclient.publish(topic, payload=state, qos=0, retain=True)
+        self.mqttclient.publish(topic, payload=state, qos=0, retain=room != self.room_all)
+
+    def make_all_room(self):
+        class AllRooms():
+            def get_state(self2):
+                state = None
+                for room in self.rooms.values():
+                    s = room['control'].get_state()
+                    if not state:
+                        state = s
+                    else:
+                        for k,v in list(state.items()):
+                            if v != s[k]:
+                                state.pop(k)
+                return state
+            
+            def set_state(self2, state):
+                for room in self.rooms.values():
+                    room['control'].set_state(state)
+                    self.mqtt_broadcast_state(room)
+
+        self.room_all = {
+            'name': 'all',
+            'mqtt_state_topic': '{}/{}/state'.format(self.topic_prefix, 'all'),
+            'control': AllRooms()
+        }
+        self.mqtt_topic_map['{}/{}/set'.format(self.topic_prefix, 'all')] = (ROOM_STATE_SET, self.room_all)
+        self.mqtt_topic_map['{}/{}/mode/set'.format(self.topic_prefix, 'all')] = (ROOM_MODE_SET, self.room_all)
+        self.mqtt_topic_map['{}/{}/temp/set'.format(self.topic_prefix, 'all')] = (ROOM_TEMP_SET, self.room_all)
 
 if __name__ == '__main__':
     mqttHeatControl =  MqttHeatControl()

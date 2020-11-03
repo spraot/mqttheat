@@ -6,7 +6,7 @@ from pid import PID
 modes = ['off', 'auto', 'cool', 'heat']
 
 class RoomControl():
-    set_temperature = 23
+    temperature = 23
     heating_level = 0
     cooling_level = 0
     mode = 'auto'
@@ -18,7 +18,7 @@ class RoomControl():
         self.can_cool = can_cool
         self.sensors = []
         self.adjacent_rooms = []
-        self.pid = PID(200, 1, 10000000, setpoint=self.set_temperature)
+        self.pid = PID(200, 1, 10000000, setpoint=self.temperature)
         self.pid.proportional_on_measurement = False
         self.pid.d_tau = 3600
 
@@ -59,18 +59,18 @@ class RoomControl():
             self.cooling_level = 0
 
     def do_onoff(self, temp):
-        if self.can_heat and self.mode in ['auto', 'heat'] and temp < self.set_temperature:
+        if self.can_heat and self.mode in ['auto', 'heat'] and temp < self.temperature:
             self.heating_level = 100
         else:
             self.heating_level = 0
 
-        if self.can_cool and self.mode in ['auto', 'cool'] and temp > self.set_temperature + 1:
+        if self.can_cool and self.mode in ['auto', 'cool'] and temp > self.temperature + 1:
             self.cooling_level = 100
         else:
             self.cooling_level = 0
 
     def do_pid(self, temp):
-        self.pid.setpoint = self.set_temperature
+        self.pid.setpoint = self.temperature
         self.pid.output_limits = (-100,100)
 #            -100 if self.can_cool and self.mode in ['auto', 'cool'] else 0,
 #            100 if self.can_heat and self.mode in ['auto', 'heat'] else 0
@@ -83,11 +83,11 @@ class RoomControl():
     def get_state(self):
         sensors_state = [s.is_connected() for s in self.sensors]
         return {
-            'temperature': self.get_temperature(),
+            'current_temperature': self.get_temperature(),
             'disconnected_sensor_count': len(sensors_state) - sum(sensors_state),
             'connected_sensor_count': sum(sensors_state),
             'mode': self.mode,
-            'set_temperature': self.set_temperature,
+            'temperature': self.temperature,
             'heating_level': self.heating_level,
             'cooling_level': self.cooling_level,
             'control_type': self.control_type,
@@ -101,7 +101,7 @@ class RoomControl():
         }
         
     def set_state(self, state):
-        for key in ['mode', 'set_temperature', 'heating_level', 'cooling_level', 'control_type']:
+        for key in ['mode', 'temperature', 'heating_level', 'cooling_level', 'control_type']:
             try:
                 self.__setattr__(key, state[key])
             except KeyError:
