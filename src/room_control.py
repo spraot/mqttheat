@@ -3,8 +3,6 @@ from statistics import mean, StatisticsError
 import logging
 from pid import PID
 
-modes = ['off', 'auto', 'cool', 'heat']
-
 class RoomControl():
     temperature = 23
     heating_level = 0
@@ -22,6 +20,12 @@ class RoomControl():
         self.pid.proportional_on_measurement = False
         self.pid.d_tau = 3600
 
+        self.modes = ['auto', 'off']
+        if self.can_cool:
+            self.modes.append('cool')
+        if self.can_heat:
+            self.modes.append('heat')
+
     def get_temperature(self, fallback_to_adj=False):
         try:
             return mean(filter(None, [s.get_temperature() for s in self.sensors]))
@@ -35,8 +39,8 @@ class RoomControl():
                 return None
 
     def update_mode(self, mode):
-        if mode not in modes:
-            raise ValueError('Mode {} not valid mode, must be one of: '.format(mode, ', '.join(modes)))
+        if mode not in self.modes:
+            raise ValueError('Mode {} not valid mode for room {}, must be one of: '.format(mode, self.name, ', '.join(self.modes)))
 
         self.mode = mode
 
@@ -94,9 +98,9 @@ class RoomControl():
             'pid_Kp': self.pid.Kp,
             'pid_Ki': self.pid.Ki,
             'pid_Kd': self.pid.Kd,
-            'pid_p': self.pid._proportional,
-            'pid_i': self.pid._integral,
-            'pid_d': self.pid._derivative,
+            'pid__proportional': self.pid._proportional,
+            'pid__integral': self.pid._integral,
+            'pid__derivative': self.pid._derivative,
             'pid_d_tau': self.pid.d_tau
         }
         
@@ -107,10 +111,10 @@ class RoomControl():
             except KeyError:
                 pass
 
-        for key in ['pid_Kp', 'pid_Ki', 'pid_Kd', 'pid_d_tau']:
+        for key in ['pid_Kp', 'pid_Ki', 'pid_Kd', 'pid_d_tau', 'pid__integral']:
             try:
                 self.pid.__setattr__(key[4:], state[key])
-            except KeyError:
+            except (KeyError, AttributeError):
                 pass
 
         try:

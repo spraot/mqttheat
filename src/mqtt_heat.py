@@ -11,7 +11,7 @@ import time
 import threading
 import logging
 import atexit
-from room_control import RoomControl, modes
+from room_control import RoomControl
 from sensor import TempSensor
 
 ROOM_TEMP_SET = 1
@@ -35,8 +35,7 @@ class MqttHeatControl():
     unique_id_suffix = '_mqttheat'
 
     default_room = {
-        'adjacent_rooms': [],
-        'modes': modes[:]
+        'adjacent_rooms': []
     }
 
     mqtt_topic_map = {}
@@ -122,12 +121,6 @@ class MqttHeatControl():
             room['control'] = RoomControl(room['name'], can_heat='output_heat_topic' in room, can_cool='output_cool_topic' in room)
             room['control'].set_state(room)
 
-            room['modes'] = ['auto', 'off']
-            if room['control'].can_cool:
-                room['modes'].append('cool')
-            if room['control'].can_heat:
-                room['modes'].append('heat')
-
     def configure_sensors(self):
         for room in self.rooms.values():
             for sensor_topic in room['sensors']:
@@ -161,7 +154,7 @@ class MqttHeatControl():
                 "name": room['name'],
                 "sw_version": "mqttio"
             },
-            'modes': room['modes'],
+            'modes': room['control'].modes,
             "unique_id": room["unique_id"]
         }
 
