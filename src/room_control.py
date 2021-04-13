@@ -52,35 +52,41 @@ class RoomControl():
             self.cooling_level = 0
 
         elif self.control_type == 'onoff':
-            self.do_onoff(temp)
+            self._do_onoff(temp)
 
         elif self.control_type == 'pid':
-            self.do_pid(temp)
+            self._do_pid(temp)
 
         else:
             logging.error('control type {} not valid for room {}, HVAC is disabled'.format(self.control_type, self.name))
             self.heating_level = 0
             self.cooling_level = 0
 
-    def do_onoff(self, temp):
-        if self.can_heat and self.mode in ['auto', 'heat'] and temp < self.temperature:
+        if not self.can_heat or self.mode not in ['auto', 'heat']:
+            self.heating_level = 0
+        
+        if not self.can_cool or self.mode not in ['auto', 'cool']:
+            self.cooling_level = 0
+
+    def _do_onoff(self, temp):
+        if temp < self.temperature:
             self.heating_level = 100
         else:
             self.heating_level = 0
 
-        if self.can_cool and self.mode in ['auto', 'cool'] and temp > self.temperature + 0.5:
+        if temp > self.temperature + 0.5:
             self.cooling_level = 100
         else:
             self.cooling_level = 0
 
-    def do_pid(self, temp):
+    def _do_pid(self, temp):
         self.pid.setpoint = self.temperature
         self.pid.integral_limits = (-200, 200)
         self.pid.output_limits = (-100, 100)
 
         power = self.pid(temp)
         self.heating_level = max(0, power)
-        self.cooling_level = max(0, -power/3)
+        self.cooling_level = max(0, -power)
 
     def get_state(self):
         sensors_state = [s.is_connected() for s in self.sensors]
