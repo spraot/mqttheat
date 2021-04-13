@@ -204,17 +204,17 @@ class MqttHeatControl():
 
                 if room['control'].can_heat:
                     heating_level = room['control'].heating_level
+                    logging.info('Room {}: setting heat level to {} (current temp is {})'.format(room['name'], heating_level, temp_str))    
                 else:
                     heating_level = 0
-                logging.info('Room {}: setting heat level to {} (current temp is {})'.format(room['name'], heating_level, temp_str))
                 if 'output_heat_topic' in room:
                     self.mqttclient.publish(room['output_heat_topic'], payload='{:0.0f}'.format(heating_level), qos=1, retain=False)
 
                 if room['control'].can_cool:
                     cooling_level = room['control'].cooling_level
+                    logging.info('Room {}: setting cooling level to {} (current temp is {})'.format(room['name'], cooling_level, temp_str))
                 else:
                     cooling_level = 0
-                logging.info('Room {}: setting cooling level to {} (current temp is {})'.format(room['name'], cooling_level, temp_str))
                 if 'output_cool_topic' in room:
                     self.mqttclient.publish(room['output_cool_topic'], payload='{:0.0f}'.format(cooling_level), qos=1, retain=False)
 
