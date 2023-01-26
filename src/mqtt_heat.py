@@ -148,8 +148,8 @@ class MqttHeatControl():
             'temp_step': 0.1,
             'initial': 22.5,
             "availability": [
-                {'topic': self.availability_topic},
-                {'topic': room["mqtt_availability_topic"]},
+                {'topic': self.availability_topic, 'value_template': '{{ value_jason.state }}'},
+                {'topic': room["mqtt_availability_topic"], 'value_template': '{{ value_jason.state }}'},
             ],
             "device": {
                 "identifiers": [room["unique_id"]],
@@ -241,13 +241,12 @@ class MqttHeatControl():
     def programend(self):
         logging.info('stopping')
 
-        self.mqttclient.publish(self.availability_topic, payload="offline", qos=0, retain=True)
         for room in self.rooms.values():
             if 'output_heat_topic' in room:
                 self.mqttclient.publish(room['output_heat_topic'], payload=0, qos=0, retain=False)
             if 'output_cool_topic' in room:
                 self.mqttclient.publish(room['output_cool_topic'], payload=0, qos=0, retain=False)
-            self.mqtt_broadcast_room_availability(room, 'offline')
+            self.mqtt_broadcast_room_availability(room, '{"state": "offline"}')
         self.mqttclient.publish(self.pump_topic, payload='OFF', qos=0, retain=False)   
 
         self.mqttclient.disconnect()
@@ -262,13 +261,14 @@ class MqttHeatControl():
             self.configure_mqtt_for_room(room)
 
             #Broadcast current room state to MQTT for rooms
-            self.mqtt_broadcast_room_availability(room, 'online')
+            self.mqtt_broadcast_room_availability(room, '{"state": "online"}')
 
             #Subsribe to MQTT room updates
             for topic in self.mqtt_topic_map.keys():
                 self.mqttclient.subscribe(topic)
 
-        self.mqttclient.publish(self.availability_topic, payload="online", qos=0, retain=True)
+        self.mqttclient.publish(self.availability_topic, payload='{"state": "online"}', qos=1, retain=True)
+        self.mqttclient.will_set(self.availability_topic, payload='{"state": "offline"}', qos=1, retain=True)
 
     def mqtt_on_message(self, client, userdata, msg):
         try:
