@@ -57,7 +57,6 @@ class MqttHeatControl():
         for room in self.rooms.values():
             self.mqtt_topic_map[room['mqtt_set_state_topic']] = (ROOM_STATE_SET, room)
             self.mqtt_topic_map[room['mqtt_state_topic']] = (ROOM_STATE, room)
-            self.mqtt_topic_map[room['mqtt_state_topic']+'/state'] = (ROOM_STATE, room)
             self.mqtt_topic_map[room['mqtt_mode_command_topic']] = (ROOM_MODE_SET, room)
             self.mqtt_topic_map[room['mqtt_temp_command_topic']] = (ROOM_TEMP_SET, room)
 
