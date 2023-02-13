@@ -219,7 +219,7 @@ class MqttHeatControl():
                     self.mqttclient.publish(room['output_cool_topic'], payload='{:0.0f}'.format(cooling_level), qos=1, retain=True)
 
             heating_levels = [r['control'].heating_level for r in self.rooms.values() if 'output_heat_topic' in r]
-            pump_state = max(heating_levels) > 20 or mean(heating_levels) > 5
+            pump_state = mean(heating_levels) > 15
             self._set_pump_state(pump_state)
 
             self.mqtt_broadcast_state(self.room_all)
