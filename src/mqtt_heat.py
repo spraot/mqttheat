@@ -204,7 +204,7 @@ class MqttHeatControl():
 
                 if room['control'].can_heat:
                     heating_level = room['control'].heating_level
-                    logging.info('Room {}: setting heat level to {} (current temp is {})'.format(room['name'], heating_level, temp_str))    
+                    logging.debug('Room {}: setting heat level to {} (current temp is {})'.format(room['name'], heating_level, temp_str))    
                 else:
                     heating_level = 0
                 if 'output_heat_topic' in room:
@@ -212,7 +212,7 @@ class MqttHeatControl():
 
                 if room['control'].can_cool:
                     cooling_level = room['control'].cooling_level
-                    logging.info('Room {}: setting cooling level to {} (current temp is {})'.format(room['name'], cooling_level, temp_str))
+                    logging.debug('Room {}: setting cooling level to {} (current temp is {})'.format(room['name'], cooling_level, temp_str))
                 else:
                     cooling_level = 0
                 if 'output_cool_topic' in room:
@@ -235,7 +235,7 @@ class MqttHeatControl():
             time.sleep(self.update_freq - (datetime.datetime.now() - start).total_seconds())
 
     def _set_pump_state(self, state):
-        logging.info('Setting pump state to {}'.format(state))
+        logging.debug('Setting pump state to {}'.format(state))
         self.mqttclient.publish(self.pump_topic, payload='ON' if state else 'OFF', qos=1, retain=True)
 
     def programend(self):
@@ -284,7 +284,7 @@ class MqttHeatControl():
                     self.mqtt_broadcast_state(room)
 
             if msg_obj[0] == ROOM_MODE_SET:
-                logging.info('Received mode command from MQTT for room {}: {}'.format(msg_obj[1]['name'], payload_as_string))
+                logging.debug('Received mode command from MQTT for room {}: {}'.format(msg_obj[1]['name'], payload_as_string))
                 set_state(msg_obj[1], {'mode': payload_as_string})
                 
             if msg_obj[0] == ROOM_TEMP_SET:
@@ -301,7 +301,7 @@ class MqttHeatControl():
 
             if msg_obj[0] == SENSOR_MSG:
                 sensor = msg_obj[1]
-                logging.info('Received MQTT message for sensor ' + sensor.name)
+                logging.debug('Received MQTT message for sensor ' + sensor.name)
                 sensor.update(json.loads(payload_as_string))
 
         except Exception as e:
