@@ -6,8 +6,10 @@ import datetime
 import json
 import yaml
 from statistics import mean
+from threading import Event
 import paho.mqtt.client as mqtt
 import time
+import signal
 import threading
 import logging
 import atexit
@@ -19,6 +21,15 @@ ROOM_MODE_SET = 2
 ROOM_STATE = 3
 ROOM_STATE_SET = 4
 SENSOR_MSG = 5
+
+class GracefulKiller:
+  def __init__(self):
+    self.kill_now = Event()
+    signal.signal(signal.SIGINT, self.exit_gracefully)
+    signal.signal(signal.SIGTERM, self.exit_gracefully)
+
+  def exit_gracefully(self, *args):
+    self.kill_now.set()
 
 class MqttHeatControl():
 
@@ -45,6 +56,8 @@ class MqttHeatControl():
     def __init__(self):
         logging.basicConfig(level=os.environ.get('LOGLEVEL', 'INFO'), format='%(asctime)s;<%(levelname)s>;%(message)s')
         logging.info('Init')
+
+        self.killer = GracefulKiller()
 
         if len(sys.argv) > 1:
             self.config_file = sys.argv[1]
@@ -188,8 +201,8 @@ class MqttHeatControl():
         logging.info('started')
 
     def main(self):
-        time.sleep(10)
-        while True:
+        self.killer.kill_now.wait(10)
+        while not self.killer.kill_now.is_set():
             start = datetime.datetime.now()
             
             for room in self.rooms.values():
@@ -232,7 +245,7 @@ class MqttHeatControl():
                     time.sleep(30)
                     self._set_pump_state(False)
 
-            time.sleep(self.update_freq - (datetime.datetime.now() - start).total_seconds())
+            self.killer.kill_now.wait(self.update_freq - (datetime.datetime.now() - start).total_seconds())
 
     def _set_pump_state(self, state):
         logging.debug('Setting pump state to {}'.format(state))
@@ -246,7 +259,7 @@ class MqttHeatControl():
                 self.mqttclient.publish(room['output_heat_topic'], payload=0, qos=1, retain=True)
             if 'output_cool_topic' in room:
                 self.mqttclient.publish(room['output_cool_topic'], payload=0, qos=1, retain=True)
-            self.mqtt_broadcast_room_availability(room, '{"state": "offline"}')
+            self.mqtt_broadcast_room_availability(room, '')
         self.mqttclient.publish(self.pump_topic, payload='OFF', qos=1, retain=True)
 
         self.mqttclient.disconnect()
