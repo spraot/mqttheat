@@ -41,7 +41,7 @@ class MqttHeatControl():
     mqtt_server_user = ''
     mqtt_server_password = ''
     pump_topic = ''
-    update_freq = 5*60
+    update_freq = 15*60
     _last_pump_cycle = None
     unique_id_suffix = '_mqttheat'
 
@@ -204,6 +204,8 @@ class MqttHeatControl():
         self.killer.kill_now.wait(10)
         while not self.killer.kill_now.is_set():
             start = datetime.datetime.now()
+
+            logging.info(f'Updating heating/cooling levels for {len(self.rooms)} zones')
             
             for room in self.rooms.values():
                 room['control'].update()
@@ -241,6 +243,7 @@ class MqttHeatControl():
             if pump_state or not self._last_pump_cycle or self._last_pump_cycle < datetime.datetime.now() - datetime.timedelta(days=1):
                 self._last_pump_cycle = datetime.datetime.now()
                 if not pump_state:
+                    logging.info('Heat water pump has been off for 24 hours, we\'ll run it for 30 seconds now')
                     self._set_pump_state(True)
                     time.sleep(30)
                     self._set_pump_state(False)
