@@ -44,7 +44,7 @@ class RoomControl():
 
         self.mode = mode
 
-    def update(self):
+    def update(self, modifier_onoff=0, modifier_pid=0):
         temp = self.get_temperature(fallback_to_adj=True)
         if temp == None:
             logging.debug('Temperature not found for room {}, HVAC is disabled'.format(self.name))
@@ -52,10 +52,10 @@ class RoomControl():
             self.cooling_level = 0
 
         elif self.control_type == 'onoff':
-            self._do_onoff(temp)
+            self._do_onoff(temp+modifier_onoff)
 
         elif self.control_type == 'pid':
-            self._do_pid(temp)
+            self._do_pid(temp, modifier_pid=modifier_pid)
 
         else:
             logging.error('control type {} not valid for room {}, HVAC is disabled'.format(self.control_type, self.name))
@@ -79,12 +79,12 @@ class RoomControl():
         else:
             self.cooling_level = 0
 
-    def _do_pid(self, temp):
+    def _do_pid(self, temp, modifier=0):
         self.pid.setpoint = self.temperature
         self.pid.integral_limits = (-200, 200)
         self.pid.output_limits = (-100, 100)
 
-        power = self.pid(temp)
+        power = self.pid(temp, modifier=modifier)
         self.heating_level = max(0, power)
         self.cooling_level = max(0, -power)
 

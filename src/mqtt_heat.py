@@ -44,6 +44,8 @@ class MqttHeatControl():
     update_freq = 15*60
     _last_pump_cycle = None
     unique_id_suffix = '_mqttheat'
+    history_hours = 6
+    history_index_max = round(history_hours*3600 / update_freq)
 
     mqtt_topic_map = {}
     rooms = {}
@@ -131,6 +133,8 @@ class MqttHeatControl():
 
             room['control'] = RoomControl(room['name'], can_heat=room['can_heat'], can_cool=room['can_cool'])
             room['control'].set_state(room)
+            room['heat_history'] = []
+            room['history_index'] = 0
 
     def configure_sensors(self):
         for room in self.rooms.values():
@@ -202,7 +206,15 @@ class MqttHeatControl():
             logging.info(f'Updating heating/cooling levels for {len(self.rooms)} zones')
             
             for room in self.rooms.values():
-                room['control'].update()
+                modifier_pid = 0
+                if (len(room['heat_history']) == self.history_index_max-1 
+                    and mean(room['heat_history']) < self.update_freq/(self.history_hours*3600)):
+                    modifier_pid += 200
+
+                if time.localtime().tm_hour >= 3 or time.localtime().tm_hour < 6:
+                    modifier_pid += 50
+
+                room['control'].update(modifier_pid=modifier_pid)
 
                 try:
                     temp_str = '{:0.1f}'.format(room['control'].get_temperature())
@@ -226,6 +238,15 @@ class MqttHeatControl():
                     cooling_level = 0
                 if 'output_cool_topic' in room:
                     self.mqttclient.publish(room['output_cool_topic'], payload='{:0.0f}'.format(cooling_level), qos=1, retain=True)
+
+            for r in self.rooms:
+                r['history_index'] += 1
+                if r['history_index'] > self.history_index_max:
+                    r['history_index'] = 0
+                if len(r['heat_history']) <= r['history_index']:
+                    r['heat_history'].append(r['control'].heating_level)
+                else:
+                    r['heat_history'][r['history_index']] = r['control'].heating_level
 
             heating_levels = [r['control'].heating_level for r in self.rooms.values() if 'output_heat_topic' in r]
             pump_state = mean(heating_levels) > 15

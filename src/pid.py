@@ -71,7 +71,7 @@ class PID(object):
 
         self.reset()
 
-    def __call__(self, input_, dt=None):
+    def __call__(self, input_, dt=None, modifier=0):
         """
         Update the PID controller.
 
@@ -119,7 +119,7 @@ class PID(object):
             self._derivative = derivative
 
         # compute final output
-        output = self._proportional + self._integral + self._derivative
+        output = self._proportional + self._integral + self._derivative + modifier
         output = _clamp(output, self.output_limits)
 
         # keep track of state
