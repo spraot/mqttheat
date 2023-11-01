@@ -55,7 +55,7 @@ class RoomControl():
             self._do_onoff(temp+modifier_onoff)
 
         elif self.control_type == 'pid':
-            self._do_pid(temp, modifier_pid=modifier_pid)
+            self._do_pid(temp, modifier=modifier_pid)
 
         else:
             logging.error('control type {} not valid for room {}, HVAC is disabled'.format(self.control_type, self.name))
