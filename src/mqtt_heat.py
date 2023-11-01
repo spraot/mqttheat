@@ -45,10 +45,6 @@ class MqttHeatControl():
     _last_pump_cycle = None
     unique_id_suffix = '_mqttheat'
 
-    default_room = {
-        'adjacent_rooms': []
-    }
-
     mqtt_topic_map = {}
     rooms = {}
     sensors = {}
@@ -111,14 +107,12 @@ class MqttHeatControl():
             if 'name' not in room:
                 room['name'] = room['id']
 
-            for k, v in self.default_room.items():
-                if not k in room:
-                    room[k] = v
-
             if not 'unique_id' in room:
                 room['unique_id'] = room["id"].replace('/', '_')
             room['unique_id'] += self.unique_id_suffix
 
+            if not 'adjacent_rooms' in room:
+                room['adjacent_rooms'] = []
             try:
                 room['adjacent_rooms'] = [self.rooms[adj] for adj in room['adjacent_rooms']]
             except KeyError as e:
