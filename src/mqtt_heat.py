@@ -239,14 +239,13 @@ class MqttHeatControl():
                 if 'output_cool_topic' in room:
                     self.mqttclient.publish(room['output_cool_topic'], payload='{:0.0f}'.format(cooling_level), qos=1, retain=True)
 
-            for r in self.rooms:
-                r['history_index'] += 1
-                if r['history_index'] > self.history_index_max:
-                    r['history_index'] = 0
-                if len(r['heat_history']) <= r['history_index']:
-                    r['heat_history'].append(r['control'].heating_level)
+                room['history_index'] += 1
+                if room['history_index'] > self.history_index_max:
+                    room['history_index'] = 0
+                if len(room['heat_history']) <= room['history_index']:
+                    room['heat_history'].append(room['control'].heating_level)
                 else:
-                    r['heat_history'][r['history_index']] = r['control'].heating_level
+                    room['heat_history'][room['history_index']] = room['control'].heating_level
 
             heating_levels = [r['control'].heating_level for r in self.rooms.values() if 'output_heat_topic' in r]
             pump_state = mean(heating_levels) > 15
