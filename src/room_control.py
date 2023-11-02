@@ -19,6 +19,8 @@ class RoomControl():
         self.pid = PID(200, 1, 10000000, setpoint=self.temperature)
         self.pid.proportional_on_measurement = False
         self.pid.d_tau = 3600
+        self._modifier_pid = 0
+        self._modifier_onoff = 0
 
         self.modes = ['auto', 'off']
         if self.can_cool:
@@ -45,6 +47,8 @@ class RoomControl():
         self.mode = mode
 
     def update(self, modifier_onoff=0, modifier_pid=0):
+        self._modifier_pid = modifier_pid
+        self._modifier_onoff = modifier_onoff
         temp = self.get_temperature(fallback_to_adj=True)
         if temp == None:
             logging.debug('Temperature not found for room {}, HVAC is disabled'.format(self.name))
@@ -52,10 +56,10 @@ class RoomControl():
             self.cooling_level = 0
 
         elif self.control_type == 'onoff':
-            self._do_onoff(temp+modifier_onoff)
+            self._do_onoff(temp)
 
         elif self.control_type == 'pid':
-            self._do_pid(temp, modifier=modifier_pid)
+            self._do_pid(temp)
 
         else:
             logging.error('control type {} not valid for room {}, HVAC is disabled'.format(self.control_type, self.name))
@@ -69,22 +73,22 @@ class RoomControl():
             self.cooling_level = 0
 
     def _do_onoff(self, temp):
-        if temp < self.temperature:
+        if temp+self.modifier_onoff < self.temperature:
             self.heating_level = 100
         else:
             self.heating_level = 0
 
-        if temp > self.temperature + 0.5:
+        if temp+self.modifier_onoff > self.temperature + 0.5:
             self.cooling_level = 100
         else:
             self.cooling_level = 0
 
-    def _do_pid(self, temp, modifier=0):
+    def _do_pid(self, temp):
         self.pid.setpoint = self.temperature
         self.pid.integral_limits = (-200, 200)
         self.pid.output_limits = (-100, 100)
 
-        power = self.pid(temp, modifier=modifier)
+        power = self.pid(temp, modifier=self._modifier_pid)
         self.heating_level = max(0, power)
         self.cooling_level = max(0, -power)
 
@@ -105,6 +109,7 @@ class RoomControl():
             'pid__proportional': self.pid._proportional,
             'pid__integral': self.pid._integral,
             'pid__derivative': self.pid._derivative,
+            'pid__modifier': self._modifier_pid,
             'pid_d_tau': self.pid.d_tau
         }
         
@@ -120,6 +125,16 @@ class RoomControl():
                 self.pid.__setattr__(key[4:], state[key])
             except (KeyError, AttributeError):
                 pass
+
+        try:
+            self._modifier_pid = state['pid_modifier']
+        except (KeyError, AttributeError):
+            pass
+
+        try:
+            self._modifier_onoff = state['onoff_modifier']
+        except (KeyError, AttributeError):
+            pass
 
         try:
             self.pid.last_output = state['heating_level'] if state['heating_level'] > 0 else -state['cooling_level']

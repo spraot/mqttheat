@@ -211,10 +211,10 @@ class MqttHeatControl():
                     and mean(room['heat_history']) < self.update_freq/(self.history_hours*3600)):
                     modifier_pid += 200
 
-                if time.localtime().tm_hour >= 3 or time.localtime().tm_hour < 6:
-                    modifier_pid += 50
+                if time.localtime().tm_hour >= 0 or time.localtime().tm_hour < 4:
+                    modifier_pid += 100
 
-                room['control'].update(modifier_pid=modifier_pid)
+                room['control'].update(modifier_pid=modifier_pid, modifier_onoff=-modifier_pid*0.005)
 
                 try:
                     temp_str = '{:0.1f}'.format(room['control'].get_temperature())
