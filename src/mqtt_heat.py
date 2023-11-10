@@ -207,8 +207,10 @@ class MqttHeatControl():
             
             for room in self.rooms.values():
                 modifier_pid = 0
-                if (len(room['heat_history']) == self.history_index_max-1 
+                if (len(room['heat_history']) == self.history_index_max+1 
                     and mean(room['heat_history']) < self.update_freq/(self.history_hours*3600)):
+                    # If the average heating level over the last 'history_hours' hours is less than
+                    # one cycle at 100%, let's increase the modifier to keep the floor warm
                     modifier_pid += 200
 
                 if time.localtime().tm_hour >= 0 and time.localtime().tm_hour < 4:
