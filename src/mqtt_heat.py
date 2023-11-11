@@ -44,7 +44,7 @@ class MqttHeatControl():
     update_freq = 15*60
     _last_pump_cycle = None
     unique_id_suffix = '_mqttheat'
-    history_hours = 6
+    history_hours = 12
     history_index_max = round(history_hours*3600 / update_freq)
 
     mqtt_topic_map = {}
@@ -214,7 +214,7 @@ class MqttHeatControl():
                     modifier_pid += 200
 
                 if time.localtime().tm_hour >= 0 and time.localtime().tm_hour < 4:
-                    modifier_pid += 100
+                    modifier_pid += 200
 
                 room['control'].update(modifier_pid=modifier_pid, modifier_onoff=-modifier_pid*0.005)
 
