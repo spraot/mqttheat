@@ -250,7 +250,7 @@ class MqttHeatControl():
                     room['heat_history'][room['history_index']] = room['control'].heating_level
 
             heating_levels = [r['control'].heating_level for r in self.rooms.values() if 'output_heat_topic' in r]
-            pump_state = mean(heating_levels) > 15
+            pump_state = mean(heating_levels) > 25
             self._set_pump_state(pump_state)
 
             self.mqtt_broadcast_state(self.room_all)
