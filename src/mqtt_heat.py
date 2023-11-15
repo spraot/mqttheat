@@ -261,7 +261,7 @@ class MqttHeatControl():
                 if not pump_state:
                     logging.info('Heat water pump has been off for 24 hours, we\'ll run it for 30 seconds now')
                     self._set_pump_state(True)
-                    time.sleep(30)
+                    self.killer.kill_now.wait(30)
                     self._set_pump_state(False)
 
             self.killer.kill_now.wait(self.update_freq - (datetime.datetime.now() - start).total_seconds())
