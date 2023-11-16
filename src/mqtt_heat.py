@@ -213,8 +213,8 @@ class MqttHeatControl():
                     # one cycle at 100%, let's increase the modifier to keep the floor warm
                     modifier_pid += 200
 
-                if time.localtime().tm_hour >= 0 and time.localtime().tm_hour < 4:
-                    modifier_pid += 200
+                if time.localtime().tm_hour >= 0 and time.localtime().tm_hour < 5:
+                    modifier_pid += 300
 
                 room['control'].update(modifier_pid=modifier_pid, modifier_onoff=-modifier_pid*0.005)
 
