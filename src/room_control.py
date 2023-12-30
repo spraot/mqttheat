@@ -73,12 +73,12 @@ class RoomControl():
             self.cooling_level = 0
 
     def _do_onoff(self, temp):
-        if temp+self.modifier_onoff < self.temperature:
+        if temp+self._modifier_onoff < self.temperature:
             self.heating_level = 100
         else:
             self.heating_level = 0
 
-        if temp+self.modifier_onoff > self.temperature + 0.5:
+        if temp+self._modifier_onoff > self.temperature + 0.5:
             self.cooling_level = 100
         else:
             self.cooling_level = 0
