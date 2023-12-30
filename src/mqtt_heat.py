@@ -370,7 +370,7 @@ class MqttHeatControl():
 
         self.room_all = {
             'name': 'all',
-            'mqtt_state_topic': '{}/{}/state'.format(self.topic_prefix, 'all'),
+            'mqtt_state_topic': '{}/{}'.format(self.topic_prefix, 'all'),
             'control': AllRooms()
         }
         self.mqtt_topic_map['{}/{}/set'.format(self.topic_prefix, 'all')] = (ROOM_STATE_SET, self.room_all)
