@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+from math import floor
 import os
 import sys
 import datetime
@@ -16,6 +17,7 @@ import atexit
 from room_control import RoomControl
 from sensor import TempSensor
 
+OTHER_MSG = 0
 ROOM_TEMP_SET = 1
 ROOM_MODE_SET = 2
 ROOM_STATE = 3
@@ -30,6 +32,14 @@ class GracefulKiller:
 
   def exit_gracefully(self, *args):
     self.kill_now.set()
+
+def hourInRange(hour, start, end):
+    if end > 23:
+        end = end - floor(end/24)
+    if start <= end:
+        return hour >= start and hour < end
+    else:
+        return hour >= start or hour < end
 
 class MqttHeatControl():
 
@@ -46,6 +56,10 @@ class MqttHeatControl():
     unique_id_suffix = '_mqttheat'
     history_hours = 12
     history_index_max = round(history_hours*3600 / update_freq)
+    weather_topic = None
+    weather_forecast_topic = None
+    weather_temp = None
+    weather_temp_forecast = None
 
     mqtt_topic_map = {}
     rooms = {}
@@ -74,6 +88,16 @@ class MqttHeatControl():
         for topic, sensor in self.sensors.items():
             self.mqtt_topic_map[topic] = (SENSOR_MSG, sensor)
 
+        if self.weather_topic:
+            def weather_callback(topic, payload):
+                self.weather_temp = json.loads(payload)['temperature']
+            self.mqtt_topic_map[self.weather_topic] = (OTHER_MSG, weather_callback)
+
+        if self.weather_forecast_topic:
+            def weather_forecast_callback(topic, payload):
+                self.weather_temp_forecast = json.loads(payload)['temperature']
+            self.mqtt_topic_map[self.weather_forecast_topic] = (OTHER_MSG, weather_forecast_callback)
+
         logging.debug('room list: '+', '.join(self.rooms.keys()))
         logging.debug('sensor list: '+', '.join(self.sensors.keys()))
         logging.debug('subscribed topics list: '+', '.join(self.mqtt_topic_map.keys()))
@@ -94,7 +118,7 @@ class MqttHeatControl():
         with open(self.config_file, 'r') as f:
             config = yaml.safe_load(f)
 
-        for key in ['topic_prefix', 'homeassistant_prefix', 'mqtt_server_ip', 'mqtt_server_port', 'mqtt_server_user', 'mqtt_server_password', 'rooms', 'unique_id_suffix', 'update_freq']:
+        for key in ['topic_prefix', 'homeassistant_prefix', 'mqtt_server_ip', 'mqtt_server_port', 'mqtt_server_user', 'mqtt_server_password', 'rooms', 'unique_id_suffix', 'update_freq', 'weather_temp_topic', 'weather_temp_forecast_topic']:
             try:
                 self.__setattr__(key, config[key])
             except KeyError:
@@ -205,16 +229,26 @@ class MqttHeatControl():
 
             logging.info(f'Updating heating/cooling levels for {len(self.rooms)} zones')
             
+            night_pid_modifier = 0
+            night_hour_end = 1
+            if self.weather_temp_forecast:
+                night_hour_end = 19 + max(0, (15-self.weather_temp_forecast)*0.5)
+            if hourInRange(time.localtime().tm_hour, 19, night_hour_end):
+                adj = 1
+                if self.weather_temp_forecast:
+                    adj = max(0, (18 - self.weather_temp_forecast) / 13)
+                night_pid_modifier += adj*350
+
+            logging.info('Night PID modifier: {}'.format(night_pid_modifier))
+
             for room in self.rooms.values():
-                modifier_pid = 0
+                modifier_pid = night_pid_modifier
                 if (len(room['heat_history']) == self.history_index_max+1 
-                    and mean(room['heat_history'][:-1]) < self.update_freq/(self.history_hours*3600)):
+                    and mean(room['heat_history'][:-floor(30*60/self.update_freq)]) < self.update_freq/(self.history_hours*3600)):
                     # If the average heating level over the last 'history_hours' hours is less than
                     # one cycle at 100%, let's increase the modifier to keep the floor warm
+                    # Ignore the last 30 minutes of history to avoid the effect of the last cycles
                     modifier_pid += 250
-
-                if time.localtime().tm_hour >= 20 or time.localtime().tm_hour < 2:
-                    modifier_pid += 350
 
                 room['control'].update(modifier_pid=modifier_pid, modifier_onoff=-modifier_pid*0.005)
 
@@ -299,6 +333,12 @@ class MqttHeatControl():
             for topic in self.mqtt_topic_map.keys():
                 self.mqttclient.subscribe(topic)
 
+        if self.weather_topic:
+            self.mqttclient.subscribe(self.weather_topic)
+
+        if self.weather_forecast_topic:
+            self.mqttclient.subscribe(self.weather_forecast_topic)
+
         self.mqttclient.publish(self.availability_topic, payload='{"state": "online"}', qos=1, retain=True)
         self.mqttclient.will_set(self.availability_topic, payload='{"state": "offline"}', qos=1, retain=True)
 
@@ -335,6 +375,10 @@ class MqttHeatControl():
                 sensor = msg_obj[1]
                 logging.debug('Received MQTT message for sensor ' + sensor.name)
                 sensor.update(json.loads(payload_as_string))
+
+            if msg_obj[0] == OTHER_MSG:
+                logging.debug('Received MQTT message for other topic ' + msg.topic)
+                msg_obj[1](msg.topic, payload_as_string)
 
         except Exception as e:
             logging.error('Encountered error: '+str(e))
