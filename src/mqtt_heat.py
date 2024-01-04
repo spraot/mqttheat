@@ -236,8 +236,8 @@ class MqttHeatControl():
             if hourInRange(time.localtime().tm_hour, 19, night_hour_end):
                 adj = 1
                 if self.weather_temp_forecast:
-                    adj = max(0, (18 - self.weather_temp_forecast) / 13)
-                night_pid_modifier += adj*350
+                    adj = min(1, max(0, (12 - self.weather_temp_forecast) / 15))
+                night_pid_modifier += adj*450
 
             logging.info('Night PID modifier: {}'.format(night_pid_modifier))
 
