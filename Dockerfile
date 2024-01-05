@@ -4,7 +4,9 @@ ENV LANG C.UTF-8
 ENV LC_ALL C.UTF-8
 
 RUN apt-get update \
-    & apt-get -y upgrade
+    & apt-get -y upgrade \
+    & app-get install -y --no-install-recommends \
+    cmake
 
 WORKDIR /app
 
