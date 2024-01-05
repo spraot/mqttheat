@@ -232,14 +232,14 @@ class MqttHeatControl():
             night_hour_start = 19
             night_hour_end = 1
             cloud_cover = 75
-            if self.weather_forecast:
-                night_hour_end = night_hour_start + 1 + max(0, (12-self.weather_forecast['temperature'])*0.5)
-                cloud_cover = int(self.weather_forecast['clouds'])
+            if self.weather_forecast.is_connected():
+                night_hour_end = night_hour_start + 1 + max(0, (12-self.weather_forecast.getValue('temperature')*0.5))
+                cloud_cover = int(self.weather_forecast.getValue('clouds'))
 
             if hourInRange(time.localtime().tm_hour, night_hour_start, night_hour_end):
                 adj = 1
-                if self.weather_forecast:
-                    adj = min(1, max(0.2, (12 - self.weather_forecast['temperature']) / 15))
+                if self.weather_forecast.is_connected():
+                    adj = min(1, max(0.2, (12 - self.weather_forecast.getValue('temperature')) / 15))
                 base_pid_modifier += adj*450
 
             forecast_time = (datetime.datetime.now() + datetime.timedelta(hours=12)).astimezone()
