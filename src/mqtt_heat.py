@@ -60,8 +60,6 @@ class MqttHeatControl():
     history_index_max = round(history_hours*3600 / update_freq)
     weather_topic = None
     weather_forecast_topic = None
-    weather_current = Sensor()
-    weather_forecast = Sensor()
 
     mqtt_topic_map = {}
     rooms = {}
@@ -72,6 +70,9 @@ class MqttHeatControl():
         logging.info('Init')
 
         self.killer = GracefulKiller()
+
+        self.weather_current = Sensor('weather')
+        self.weather_forecast = Sensor('forecast')
 
         if len(sys.argv) > 1:
             self.config_file = sys.argv[1]
