@@ -262,7 +262,7 @@ class MqttHeatControl():
                 room['control'].update(modifier_pid=modifier_pid, modifier_onoff=-modifier_pid*0.005)
 
                 try:
-                    temp_str = '{:0.1f}'.format(room['control'].getValue('temperature'))
+                    temp_str = '{:0.1f}'.format(room['control'].get_temperature())
                 except TypeError:
                     temp_str = 'None'
 
