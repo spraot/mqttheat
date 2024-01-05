@@ -15,9 +15,9 @@ import threading
 import logging
 import atexit
 from room_control import RoomControl
-from sensor import TempSensor
-
-OTHER_MSG = 0
+from sensor import Sensor
+from pysolar.solar import *
+import pysolar.radiation as radiation
 ROOM_TEMP_SET = 1
 ROOM_MODE_SET = 2
 ROOM_STATE = 3
@@ -35,7 +35,7 @@ class GracefulKiller:
 
 def hourInRange(hour, start, end):
     if end > 23:
-        end = end - floor(end/24)
+        end = end - floor(end/24)*24
     if start <= end:
         return hour >= start and hour < end
     else:
@@ -51,6 +51,8 @@ class MqttHeatControl():
     mqtt_server_user = ''
     mqtt_server_password = ''
     pump_topic = ''
+    latitude = None
+    longitude = None
     update_freq = 15*60
     _last_pump_cycle = None
     unique_id_suffix = '_mqttheat'
@@ -58,8 +60,8 @@ class MqttHeatControl():
     history_index_max = round(history_hours*3600 / update_freq)
     weather_topic = None
     weather_forecast_topic = None
-    weather_temp = None
-    weather_temp_forecast = None
+    weather_current = Sensor()
+    weather_forecast = Sensor()
 
     mqtt_topic_map = {}
     rooms = {}
@@ -89,14 +91,10 @@ class MqttHeatControl():
             self.mqtt_topic_map[topic] = (SENSOR_MSG, sensor)
 
         if self.weather_topic:
-            def weather_callback(topic, payload):
-                self.weather_temp = json.loads(payload)['temperature']
-            self.mqtt_topic_map[self.weather_topic] = (OTHER_MSG, weather_callback)
+            self.mqtt_topic_map[self.weather_topic] = (SENSOR_MSG, self.weather_current)
 
         if self.weather_forecast_topic:
-            def weather_forecast_callback(topic, payload):
-                self.weather_temp_forecast = json.loads(payload)['temperature']
-            self.mqtt_topic_map[self.weather_forecast_topic] = (OTHER_MSG, weather_forecast_callback)
+            self.mqtt_topic_map[self.weather_forecast_topic] = (SENSOR_MSG, self.weather_forecast)
 
         logging.debug('room list: '+', '.join(self.rooms.keys()))
         logging.debug('sensor list: '+', '.join(self.sensors.keys()))
@@ -118,7 +116,7 @@ class MqttHeatControl():
         with open(self.config_file, 'r') as f:
             config = yaml.safe_load(f)
 
-        for key in ['topic_prefix', 'homeassistant_prefix', 'mqtt_server_ip', 'mqtt_server_port', 'mqtt_server_user', 'mqtt_server_password', 'rooms', 'unique_id_suffix', 'update_freq', 'weather_topic', 'weather_forecast_topic']:
+        for key in ['topic_prefix', 'homeassistant_prefix', 'mqtt_server_ip', 'mqtt_server_port', 'mqtt_server_user', 'mqtt_server_password', 'rooms', 'unique_id_suffix', 'update_freq', 'weather_topic', 'weather_forecast_topic', 'latitude', 'longitude']:
             try:
                 self.__setattr__(key, config[key])
             except KeyError:
@@ -164,7 +162,7 @@ class MqttHeatControl():
         for room in self.rooms.values():
             for sensor_topic in room['sensors']:
                 if sensor_topic not in self.sensors:
-                    self.sensors[sensor_topic] = TempSensor(sensor_topic)
+                    self.sensors[sensor_topic] = Sensor(sensor_topic)
                 room['control'].sensors.append(self.sensors[sensor_topic])
 
     def configure_mqtt_for_room(self, room):
@@ -229,20 +227,30 @@ class MqttHeatControl():
 
             logging.info(f'Updating heating/cooling levels for {len(self.rooms)} zones')
             
-            night_pid_modifier = 0
+            base_pid_modifier = 0
+            night_hour_start = 19
             night_hour_end = 1
-            if self.weather_temp_forecast:
-                night_hour_end = 19 + max(0, (15-self.weather_temp_forecast)*0.5)
-            if hourInRange(time.localtime().tm_hour, 19, night_hour_end):
-                adj = 1
-                if self.weather_temp_forecast:
-                    adj = min(1, max(0, (12 - self.weather_temp_forecast) / 15))
-                night_pid_modifier += adj*450
+            cloud_cover = 75
+            if self.weather_forecast:
+                night_hour_end = night_hour_start + 1 + max(0, (12-self.weather_forecast['temperature'])*0.5)
+                cloud_cover = int(self.weather_forecast['clouds'])
 
-            logging.info('Night PID modifier: {}'.format(night_pid_modifier))
+            if hourInRange(time.localtime().tm_hour, night_hour_start, night_hour_end):
+                adj = 1
+                if self.weather_forecast:
+                    adj = min(1, max(0.2, (12 - self.weather_forecast['temperature']) / 15))
+                base_pid_modifier += adj*450
+
+            forecast_time = (datetime.datetime.now() + datetime.timedelta(hours=12)).astimezone()
+            altitude_deg = get_altitude(self.latitude, self.longitude, forecast_time)
+            sunlight = radiation.get_radiation_direct(forecast_time, altitude_deg) * (1-cloud_cover/100)
+            logging.info(f'Forecasted sunlight: {sunlight} W/m2')
+            base_pid_modifier -= sunlight/1000*500
+
+            logging.info('Night PID modifier: {}'.format(base_pid_modifier))
 
             for room in self.rooms.values():
-                modifier_pid = night_pid_modifier
+                modifier_pid = base_pid_modifier
                 if (len(room['heat_history']) == self.history_index_max+1 
                     and mean(room['heat_history'][:-floor(15*60/self.update_freq)]) < self.update_freq/(self.history_hours*3600)):
                     # If the average heating level over the last 'history_hours' hours is less than
@@ -253,7 +261,7 @@ class MqttHeatControl():
                 room['control'].update(modifier_pid=modifier_pid, modifier_onoff=-modifier_pid*0.005)
 
                 try:
-                    temp_str = '{:0.1f}'.format(room['control'].get_temperature())
+                    temp_str = '{:0.1f}'.format(room['control'].getValue('temperature'))
                 except TypeError:
                     temp_str = 'None'
 
@@ -375,10 +383,6 @@ class MqttHeatControl():
                 sensor = msg_obj[1]
                 logging.debug('Received MQTT message for sensor ' + sensor.name)
                 sensor.update(json.loads(payload_as_string))
-
-            if msg_obj[0] == OTHER_MSG:
-                logging.debug('Received MQTT message for other topic ' + msg.topic)
-                msg_obj[1](msg.topic, payload_as_string)
 
         except Exception as e:
             logging.error('Encountered error: '+str(e))

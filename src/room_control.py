@@ -30,13 +30,13 @@ class RoomControl():
 
     def get_temperature(self, fallback_to_adj=False):
         try:
-            return mean(filter(None, [s.get_temperature() for s in self.sensors]))
+            return mean(filter(None, [s.getValue('temperature') for s in self.sensors]))
         except StatisticsError:
             if not fallback_to_adj:
                 return None
             
             try:
-                return mean(filter(None, [r.get_temperature() for r in self.adjacent_rooms]))
+                return mean(filter(None, [r.getValue('temperature') for r in self.adjacent_rooms]))
             except StatisticsError:
                 return None
 

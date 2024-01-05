@@ -1,8 +1,7 @@
 import datetime
 
-class TempSensor():
-    __temp = None
-    __humidity = None
+class Sensor():
+    __last_message = {}
     __last_seen = None
     timeout = 90*60
 
@@ -10,8 +9,7 @@ class TempSensor():
         self.name = name
 
     def update(self, data):
-        self.__temp = data['temperature']
-        self.__humidity = data['humidity']
+        self.__last_message = data
 
         try:
             last_seen = data['last_seen']
@@ -25,8 +23,8 @@ class TempSensor():
     def is_connected(self):
         return self.__last_seen is not None and self.__last_seen > (datetime.datetime.now() - datetime.timedelta(seconds=self.timeout))
 
-    def get_temperature(self):
-        return self.__temp if self.is_connected() else None
-
-    def get_humidity(self):
-        return self.__humidity if self.is_connected() else None
+    def getValue(self, key):
+        try:
+            return self.__last_message[key] if self.is_connected() else None
+        except KeyError:
+            return None
