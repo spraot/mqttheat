@@ -1,4 +1,4 @@
-import datetime
+from datetime import datetime, timezone, timedelta
 
 class Sensor():
     __last_message = {}
@@ -15,13 +15,13 @@ class Sensor():
             last_seen = data['last_seen']
             if ':' == last_seen[-3]:
                 last_seen = last_seen[:-3]+last_seen[-2:]
-            last_seen = datetime.datetime.strptime(last_seen, '%Y-%m-%dT%H:%M:%S%z').astimezone(tz=None).replace(tzinfo=None)
+            last_seen = datetime.strptime(last_seen, '%Y-%m-%dT%H:%M:%S%z')
         except KeyError:
-            last_seen = datetime.datetime.now()
+            last_seen = datetime.now(timezone.utc)
         self.__last_seen = last_seen
 
     def is_connected(self):
-        return self.__last_seen is not None and self.__last_seen > (datetime.datetime.now() - datetime.timedelta(seconds=self.timeout))
+        return self.__last_seen is not None and self.__last_seen > (datetime.now(timezone.utc) - timedelta(seconds=self.timeout))
 
     def getValue(self, key):
         try:

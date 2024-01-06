@@ -61,13 +61,13 @@ class MqttHeatControl():
     weather_topic = None
     weather_forecast_topic = None
 
-    mqtt_topic_map = {}
-    rooms = {}
-    sensors = {}
-
     def __init__(self):
         logging.basicConfig(level=os.environ.get('LOGLEVEL', 'INFO'), format='%(asctime)s;<%(levelname)s>;%(message)s')
         logging.info('Init')
+
+        self.mqtt_topic_map = {}
+        self.rooms = {}
+        self.sensors = {}
 
         self.killer = GracefulKiller()
 
