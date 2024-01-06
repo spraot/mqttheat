@@ -233,7 +233,7 @@ class MqttHeatControl():
             night_hour_end = 1
             cloud_cover = 75
             if self.weather_forecast.is_connected():
-                night_hour_end = night_hour_start + 1 + max(0, (12-self.weather_forecast.getValue('temperature')*0.5))
+                night_hour_end = night_hour_start + 1 + max(0, (12-self.weather_forecast.getValue('temperature'))*0.5)
                 cloud_cover = int(self.weather_forecast.getValue('clouds'))
 
             if hourInRange(time.localtime().tm_hour, night_hour_start, night_hour_end):
