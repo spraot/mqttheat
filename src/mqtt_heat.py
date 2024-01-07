@@ -240,13 +240,13 @@ class MqttHeatControl():
                 adj = 1
                 if self.weather_forecast.is_connected():
                     adj = min(1, max(0.2, (12 - self.weather_forecast.getValue('temperature')) / 15))
-                base_pid_modifier += adj*450
+                base_pid_modifier += adj*400
 
-            forecast_time = (datetime.datetime.now() + datetime.timedelta(hours=12)).astimezone()
+            forecast_time = (datetime.datetime.now() + datetime.timedelta(hours=10)).astimezone()
             altitude_deg = get_altitude(self.latitude, self.longitude, forecast_time)
             sunlight = radiation.get_radiation_direct(forecast_time, altitude_deg) * (1-cloud_cover/100)
             logging.info(f'Forecasted sunlight: {sunlight} W/m2')
-            base_pid_modifier -= sunlight/1000*500
+            base_pid_modifier -= sunlight/1000*400
 
             logging.info('Night PID modifier: {}'.format(base_pid_modifier))
 
