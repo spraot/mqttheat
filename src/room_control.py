@@ -85,7 +85,7 @@ class RoomControl():
 
     def _do_pid(self, temp):
         self.pid.setpoint = self.temperature
-        self.pid.integral_limits = (-400, 400)
+        self.pid.integral_limits = (-200, 200)
         self.pid.output_limits = (-100, 100)
 
         power = self.pid(temp, modifier=self._modifier_pid)
