@@ -7,7 +7,7 @@ mqtt_server_password: 123abc
 latitude: 56
 longitude: 10
 
-pump: revpi/io/heat_pump/set
+pump_topic: revpi/io/heat_pump/set
 
 rooms:
   office:

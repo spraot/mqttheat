@@ -23,6 +23,7 @@ ROOM_MODE_SET = 2
 ROOM_STATE = 3
 ROOM_STATE_SET = 4
 SENSOR_MSG = 5
+CONFIG_SET = 6
 
 class GracefulKiller:
   def __init__(self):
@@ -66,8 +67,8 @@ class MqttHeatControl():
     keep_warm_modifier = 150
     keep_warm_ignore_minutes = 25
 
-    config_options_mqtt = ['update_freq', 'weather_topic', 'weather_forecast_topic', 'latitude', 'longitude', 'night_hour_start', 'night_adjust_factor', 'sunlight_adjust_factor', 'keep_warm_modifier', 'keep_warm_ignore_minutes']
-    config_options = [*config_options_mqtt, 'topic_prefix', 'homeassistant_prefix', 'mqtt_server_ip', 'mqtt_server_port', 'mqtt_server_user', 'mqtt_server_password', 'rooms', 'unique_id_suffix', 'history_hours']
+    config_options_mqtt = ['pump_topic', 'update_freq', 'latitude', 'longitude', 'night_hour_start', 'night_adjust_factor', 'sunlight_adjust_factor', 'keep_warm_modifier', 'keep_warm_ignore_minutes']
+    config_options = [*config_options_mqtt, 'topic_prefix', 'homeassistant_prefix', 'mqtt_server_ip', 'mqtt_server_port', 'mqtt_server_user', 'mqtt_server_password', 'rooms', 'unique_id_suffix', 'history_hours', 'weather_topic', 'weather_forecast_topic']
 
     def __init__(self):
         logging.basicConfig(level=os.environ.get('LOGLEVEL', 'INFO'), format='%(asctime)s;<%(levelname)s>;%(message)s')
@@ -105,6 +106,8 @@ class MqttHeatControl():
         if self.weather_forecast_topic:
             self.mqtt_topic_map[self.weather_forecast_topic] = (SENSOR_MSG, self.weather_forecast)
 
+        self.mqtt_topic_map['{}/config/set'.format(self.topic_prefix)] = (CONFIG_SET, None)
+
         logging.debug('room list: '+', '.join(self.rooms.keys()))
         logging.debug('sensor list: '+', '.join(self.sensors.keys()))
         logging.debug('subscribed topics list: '+', '.join(self.mqtt_topic_map.keys()))
@@ -124,15 +127,14 @@ class MqttHeatControl():
         logging.info('Reading config from '+self.config_file)
 
         with open(self.config_file, 'r') as f:
-            config = yaml.safe_load(f)
+            self.config = yaml.safe_load(f)
 
         for key in self.config_options:
             try:
-                self.__setattr__(key, config[key])
+                self.__setattr__(key, self.config[key])
             except KeyError:
                 pass
 
-        self.pump_topic = config['pump']
         self.availability_topic = self.topic_prefix + '/bridge/state'
 
         for id, room in self.rooms.items():
@@ -406,6 +408,19 @@ class MqttHeatControl():
                 sensor = msg_obj[1]
                 logging.debug('Received MQTT message for sensor ' + sensor.name)
                 sensor.update(json.loads(payload_as_string))
+
+            if msg_obj[0] == CONFIG_SET:
+                config = json.loads(payload_as_string)
+                for key in config:
+                    if key not in self.config_options_mqtt:
+                        raise KeyError('Cannot set config option: {}'.format(key))
+                    if not (isinstance(config[key], str) or isinstance(config[key], int) or isinstance(config[key], float)):
+                        raise ValueError('Cannot set config option: {} (invalid type)'.format(key))
+                for key in config:
+                    self.__setattr__(key, config[key])
+                    self.config[key] = config[key]
+
+                yaml.dump(self.config, open(self.config_file, 'w'), default_flow_style=False)
 
         except Exception as e:
             logging.error('Encountered error: '+str(e))
