@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+from copy import deepcopy
 from math import floor
 import os
 import sys
@@ -137,6 +138,7 @@ class MqttHeatControl():
 
         self.availability_topic = self.topic_prefix + '/bridge/state'
 
+        self.rooms = deepcopy(self.rooms)
         for id, room in self.rooms.items():
             room['id'] = id
 
@@ -417,6 +419,7 @@ class MqttHeatControl():
                     if not (isinstance(config[key], str) or isinstance(config[key], int) or isinstance(config[key], float)):
                         raise ValueError('Cannot set config option: {} (invalid type)'.format(key))
                 for key in config:
+                    logging.info('Setting config option: {} = {}'.format(key, config[key]))
                     self.__setattr__(key, config[key])
                     self.config[key] = config[key]
 
