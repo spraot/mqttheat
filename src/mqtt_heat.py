@@ -255,11 +255,14 @@ class MqttHeatControl():
 
             for room in self.rooms.values():
                 modifier_pid = base_pid_modifier
+                def remove_inx(a, cur, prev_cnt):
+                    return [*a[:max(0, cur-prev_cnt)], *a[cur:len(a)+min(0, cur-prev_cnt)]]
+                room['history_index']
                 if (len(room['heat_history']) == self.history_index_max+1 
-                    and mean(room['heat_history'][:-round(25*60/self.update_freq)]) < self.update_freq/(self.history_hours*3600)):
+                    and mean(remove_inx(room['heat_history'], room['history_index'], round(25*60/self.update_freq)-1)) < self.update_freq/(self.history_hours*3600)):
                     # If the average heating level over the last 'history_hours' hours is less than
                     # one cycle at 100%, let's increase the modifier to keep the floor warm
-                    # Ignore the last ~25 minutes of history to avoid the effect of the last cycles
+                    # Ignore ~25 minutes of history to avoid the effect of the last and current cycles
                     modifier_pid += 150
 
                 room['control'].update(modifier_pid=modifier_pid, modifier_onoff=-modifier_pid*0.005)
