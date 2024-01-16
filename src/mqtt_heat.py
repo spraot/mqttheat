@@ -65,10 +65,11 @@ class MqttHeatControl():
     night_hour_start = 18
     night_adjust_factor = 225
     sunlight_adjust_factor = 180
+    sunlight_offset_hours = 10
     keep_warm_modifier = 150
     keep_warm_ignore_minutes = 25
 
-    config_options_mqtt = ['pump_topic', 'update_freq', 'latitude', 'longitude', 'night_hour_start', 'night_adjust_factor', 'sunlight_adjust_factor', 'keep_warm_modifier', 'keep_warm_ignore_minutes']
+    config_options_mqtt = ['pump_topic', 'update_freq', 'latitude', 'longitude', 'night_hour_start', 'night_adjust_factor', 'sunlight_adjust_factor', 'sunlight_offset_hours', 'keep_warm_modifier', 'keep_warm_ignore_minutes']
     config_options = [*config_options_mqtt, 'topic_prefix', 'homeassistant_prefix', 'mqtt_server_ip', 'mqtt_server_port', 'mqtt_server_user', 'mqtt_server_password', 'rooms', 'unique_id_suffix', 'history_hours', 'weather_topic', 'weather_forecast_topic']
 
     def __init__(self):
@@ -259,17 +260,20 @@ class MqttHeatControl():
                     adj = min(1, max(0.2, (12 - self.weather_forecast.getValue('temperature')) / 18))
                 base_pid_modifier += adj*self.night_adjust_factor
 
+            logging.info('Night PID modifier: {}'.format(base_pid_modifier))
+
             # Apply sunlight modifier
             cloud_cover = 75 # default value if forecast is not available
             if self.weather_forecast.is_connected():
                 cloud_cover = int(self.weather_forecast.getValue('clouds'))
-            forecast_time = (datetime.datetime.now() + datetime.timedelta(hours=10)).astimezone()
+            forecast_time = (datetime.datetime.now() + datetime.timedelta(hours=self.sunlight_offset_hours)).astimezone()
             altitude_deg = get_altitude(self.latitude, self.longitude, forecast_time)
             sunlight = radiation.get_radiation_direct(forecast_time, altitude_deg) * (1-cloud_cover/100)
             logging.info(f'Forecasted sunlight: {sunlight} W/m2')
-            base_pid_modifier -= sunlight/1000*self.sunlight_adjust_factor
+            sunlight_pid_modifier = -sunlight/1000*self.sunlight_adjust_factor
 
-            logging.info('Night PID modifier: {}'.format(base_pid_modifier))
+            logging.info('Sunlight PID modifier: {}'.format(sunlight_pid_modifier))
+            base_pid_modifier += sunlight_pid_modifier
 
             for room in self.rooms.values():
                 modifier_pid = base_pid_modifier
