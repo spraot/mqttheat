@@ -60,6 +60,11 @@ class MqttHeatControl():
     history_index_max = round(history_hours*3600 / update_freq)
     weather_topic = None
     weather_forecast_topic = None
+    night_hour_start = 18
+    night_adjust_factor = 225
+    sunlight_adjust_factor = 180
+    keep_warm_modifier = 150
+    keep_warm_ignore_minutes = 25
 
     def __init__(self):
         logging.basicConfig(level=os.environ.get('LOGLEVEL', 'INFO'), format='%(asctime)s;<%(levelname)s>;%(message)s')
@@ -117,7 +122,7 @@ class MqttHeatControl():
         with open(self.config_file, 'r') as f:
             config = yaml.safe_load(f)
 
-        for key in ['topic_prefix', 'homeassistant_prefix', 'mqtt_server_ip', 'mqtt_server_port', 'mqtt_server_user', 'mqtt_server_password', 'rooms', 'unique_id_suffix', 'update_freq', 'weather_topic', 'weather_forecast_topic', 'latitude', 'longitude']:
+        for key in ['topic_prefix', 'homeassistant_prefix', 'mqtt_server_ip', 'mqtt_server_port', 'mqtt_server_user', 'mqtt_server_password', 'rooms', 'unique_id_suffix', 'update_freq', 'weather_topic', 'weather_forecast_topic', 'latitude', 'longitude', 'night_hour_start', 'night_adjust_factor', 'sunlight_adjust_factor', 'keep_warm_modifier', 'keep_warm_ignore_minutes']:
             try:
                 self.__setattr__(key, config[key])
             except KeyError:
@@ -229,8 +234,8 @@ class MqttHeatControl():
             logging.info(f'Updating heating/cooling levels for {len(self.rooms)} zones')
             
             base_pid_modifier = 0
-            night_hour_start = 18
-            night_hour_end = 1
+            night_hour_start = self.night_hour_start
+            night_hour_end = night_hour_start+6
             cloud_cover = 75
             if self.weather_forecast.is_connected():
                 night_hours = 1 + max(0, (12-self.weather_forecast.getValue('temperature'))*0.5)
@@ -243,13 +248,13 @@ class MqttHeatControl():
                 adj = 1
                 if self.weather_forecast.is_connected():
                     adj = min(1, max(0.2, (12 - self.weather_forecast.getValue('temperature')) / 18))
-                base_pid_modifier += adj*225
+                base_pid_modifier += adj*self.night_adjust_factor
 
             forecast_time = (datetime.datetime.now() + datetime.timedelta(hours=10)).astimezone()
             altitude_deg = get_altitude(self.latitude, self.longitude, forecast_time)
             sunlight = radiation.get_radiation_direct(forecast_time, altitude_deg) * (1-cloud_cover/100)
             logging.info(f'Forecasted sunlight: {sunlight} W/m2')
-            base_pid_modifier -= sunlight/1000*180
+            base_pid_modifier -= sunlight/1000*self.sunlight_adjust_factor
 
             logging.info('Night PID modifier: {}'.format(base_pid_modifier))
 
@@ -259,11 +264,11 @@ class MqttHeatControl():
                     return [*a[:max(0, cur-prev_cnt)], *a[cur:len(a)+min(0, cur-prev_cnt)]]
                 room['history_index']
                 if (len(room['heat_history']) == self.history_index_max+1 
-                    and mean(remove_inx(room['heat_history'], room['history_index'], round(25*60/self.update_freq)-1)) < self.update_freq/(self.history_hours*3600)):
+                    and mean(remove_inx(room['heat_history'], room['history_index'], round(self.keep_warm_ignore_minutes*60/self.update_freq)-1)) < self.update_freq/(self.history_hours*3600)):
                     # If the average heating level over the last 'history_hours' hours is less than
                     # one cycle at 100%, let's increase the modifier to keep the floor warm
                     # Ignore ~25 minutes of history to avoid the effect of the last and current cycles
-                    modifier_pid += 150
+                    modifier_pid += self.keep_warm_modifier
 
                 room['control'].update(modifier_pid=modifier_pid, modifier_onoff=-modifier_pid*0.005)
 
