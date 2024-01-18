@@ -67,9 +67,9 @@ class MqttHeatControl():
     sunlight_adjust_factor = 180
     sunlight_offset_hours = 10
     keep_warm_modifier = 150
-    keep_warm_ignore_minutes = 25
+    keep_warm_ignore_cycles = 1
 
-    config_options_mqtt = ['pump_topic', 'update_freq', 'latitude', 'longitude', 'night_hour_start', 'night_adjust_factor', 'sunlight_adjust_factor', 'sunlight_offset_hours', 'keep_warm_modifier', 'keep_warm_ignore_minutes']
+    config_options_mqtt = ['pump_topic', 'update_freq', 'latitude', 'longitude', 'night_hour_start', 'night_adjust_factor', 'sunlight_adjust_factor', 'sunlight_offset_hours', 'keep_warm_modifier', 'keep_warm_ignore_cycles']
     config_options = [*config_options_mqtt, 'topic_prefix', 'homeassistant_prefix', 'mqtt_server_ip', 'mqtt_server_port', 'mqtt_server_user', 'mqtt_server_password', 'rooms', 'unique_id_suffix', 'history_hours', 'weather_topic', 'weather_forecast_topic']
 
     def __init__(self):
@@ -281,9 +281,9 @@ class MqttHeatControl():
                 # Apply keep warm modifier if the floor has been cold for a while
                 def remove_inx(a, cur, prev_cnt):
                     return [*a[:max(0, cur-prev_cnt)], *a[cur:len(a)+min(0, cur-prev_cnt)]]
-                room['history_index']
+                
                 if (len(room['heat_history']) == self.history_index_max+1 
-                    and mean(remove_inx(room['heat_history'], room['history_index'], round(self.keep_warm_ignore_minutes*60/self.update_freq)-1)) < self.update_freq/(self.history_hours*3600)):
+                    and mean(remove_inx(room['heat_history'], room['history_index'], self.keep_warm_ignore_cycles)) < self.update_freq/(self.history_hours*3600)):
                     # If the average heating level over the last 'history_hours' hours is less than
                     # one cycle at 100%, let's increase the modifier to keep the floor warm
                     # Ignore ~25 minutes of history to avoid the effect of the last and current cycles
