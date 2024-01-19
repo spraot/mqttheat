@@ -59,7 +59,6 @@ class MqttHeatControl():
     _last_pump_cycle = None
     unique_id_suffix = '_mqttheat'
     history_hours = 12
-    history_index_max = round(history_hours*3600 / update_freq)
     weather_topic = None
     weather_forecast_topic = None
     night_hour_start = 18
@@ -69,8 +68,8 @@ class MqttHeatControl():
     keep_warm_modifier = 150
     keep_warm_ignore_cycles = 1
 
-    config_options_mqtt = ['pump_topic', 'update_freq', 'latitude', 'longitude', 'night_hour_start', 'night_adjust_factor', 'sunlight_adjust_factor', 'sunlight_offset_hours', 'keep_warm_modifier', 'keep_warm_ignore_cycles']
-    config_options = [*config_options_mqtt, 'topic_prefix', 'homeassistant_prefix', 'mqtt_server_ip', 'mqtt_server_port', 'mqtt_server_user', 'mqtt_server_password', 'rooms', 'unique_id_suffix', 'history_hours', 'weather_topic', 'weather_forecast_topic']
+    config_options_mqtt = ['pump_topic', 'update_freq', 'latitude', 'longitude', 'night_hour_start', 'night_adjust_factor', 'sunlight_adjust_factor', 'sunlight_offset_hours', 'keep_warm_modifier', 'keep_warm_ignore_cycles', 'history_hours']
+    config_options = [*config_options_mqtt, 'topic_prefix', 'homeassistant_prefix', 'mqtt_server_ip', 'mqtt_server_port', 'mqtt_server_user', 'mqtt_server_password', 'rooms', 'unique_id_suffix', 'weather_topic', 'weather_forecast_topic']
 
     def __init__(self):
         logging.basicConfig(level=os.environ.get('LOGLEVEL', 'INFO'), format='%(asctime)s;<%(levelname)s>;%(message)s')
@@ -171,7 +170,6 @@ class MqttHeatControl():
             room['control'] = RoomControl(room['name'], can_heat=room['can_heat'], can_cool=room['can_cool'])
             room['control'].set_state(room)
             room['heat_history'] = []
-            room['history_index'] = 0
 
     def configure_sensors(self):
         for room in self.rooms.values():
@@ -275,18 +273,17 @@ class MqttHeatControl():
             logging.info('Sunlight PID modifier: {}'.format(sunlight_pid_modifier))
             base_pid_modifier += sunlight_pid_modifier
 
+            history_len = round(self.history_hours*3600 / self.update_freq)
+
             for room in self.rooms.values():
                 modifier_pid = base_pid_modifier
 
                 # Apply keep warm modifier if the floor has been cold for a while
-                def remove_inx(a, cur, prev_cnt):
-                    return [*a[:max(0, cur-prev_cnt)], *a[cur:len(a)+min(0, cur-prev_cnt)]]
-                
-                if (len(room['heat_history']) == self.history_index_max+1 
-                    and mean(remove_inx(room['heat_history'], room['history_index'], self.keep_warm_ignore_cycles)) < self.update_freq/(self.history_hours*3600)):
+                heat_history = room['heat_history'][len(room['heat_history'])-history_len-self.keep_warm_ignore_cycles:-self.keep_warm_ignore_cycles]
+                if (len(heat_history) >= history_len and mean(heat_history) < self.update_freq/(self.history_hours*3600)):
                     # If the average heating level over the last 'history_hours' hours is less than
                     # one cycle at 100%, let's increase the modifier to keep the floor warm
-                    # Ignore ~25 minutes of history to avoid the effect of the last and current cycles
+                    # Ignore N last cycles so that we get at least that many cycles of heating
                     modifier_pid += self.keep_warm_modifier
 
                 room['control'].update(modifier_pid=modifier_pid, modifier_onoff=-modifier_pid*0.005)
@@ -314,13 +311,10 @@ class MqttHeatControl():
                 if 'output_cool_topic' in room:
                     self.mqttclient.publish(room['output_cool_topic'], payload='{:0.0f}'.format(cooling_level), qos=1, retain=True)
 
-                room['history_index'] += 1
-                if room['history_index'] > self.history_index_max:
-                    room['history_index'] = 0
-                if len(room['heat_history']) <= room['history_index']:
-                    room['heat_history'].append(room['control'].heating_level)
-                else:
-                    room['heat_history'][room['history_index']] = room['control'].heating_level
+                # Save heat history, including extra in case setting is changed
+                room['heat_history'].append(room['control'].heating_level)
+                if len(room['heat_history']) > history_len+self.keep_warm_ignore_cycles+50:
+                    room['heat_history'].pop(0)
 
             heating_levels = [r['control'].heating_level for r in self.rooms.values() if 'output_heat_topic' in r]
             pump_state = sum(heating_levels) >= 100
