@@ -249,7 +249,7 @@ class MqttHeatControl():
                     base_pid_modifier *= forecast.getValue('ultraviolet_index_actual_average')
 
                 if base_pid_modifier > 0:
-                    base_pid_modifier *= min(1, max(0.2, (12 - forecast.getValue('temperature')) / 18)) * self.night_adjust_factor / 10
+                    base_pid_modifier *= min(1, max(0.2, (12 - forecast.getValue('temperature_min')) / 18)) * self.night_adjust_factor / 10
 
             history_len = round(self.history_hours*3600 / self.update_freq)
 
