@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 from copy import deepcopy
-from math import floor, pi, sin
+from math import floor, pi, cos
 import os
 import sys
 from datetime import datetime, timedelta
@@ -241,7 +241,7 @@ class MqttHeatControl():
             logging.info(f'Updating heating/cooling levels for {len(self.rooms)} zones')
             
             night_modifier_peak_hour = 18
-            base_pid_modifier = sin((now.hour - night_modifier_peak_hour)/24*2*pi) * 10
+            base_pid_modifier = cos((now.hour - night_modifier_peak_hour)/24*2*pi) * 10
 
             forecast = self.weather_today if now.hour < 6 else self.weather_tomorrow
             if forecast.is_connected():
