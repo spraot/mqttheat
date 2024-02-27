@@ -17,8 +17,6 @@ import logging
 import atexit
 from room_control import RoomControl
 from sensor import Sensor
-from pysolar.solar import *
-import pysolar.radiation as radiation
 ROOM_TEMP_SET = 1
 ROOM_MODE_SET = 2
 ROOM_STATE = 3
@@ -237,14 +235,15 @@ class MqttHeatControl():
     def main(self):
         self.killer.kill_now.wait(10)
         while not self.killer.kill_now.is_set():
-            start = datetime.now()
+            now = datetime.now()
+            start = now
 
             logging.info(f'Updating heating/cooling levels for {len(self.rooms)} zones')
             
             night_modifier_peak_hour = 18
-            base_pid_modifier = sin((datetime.now().hour - night_modifier_peak_hour)/24*2*pi) * 10
+            base_pid_modifier = sin((now.hour - night_modifier_peak_hour)/24*2*pi) * 10
 
-            forecast = self.weather_today if datetime.now().hour < 6 else self.weather_tomorrow
+            forecast = self.weather_today if now.hour < 6 else self.weather_tomorrow
             if forecast.is_connected():
                 if base_pid_modifier < 0:
                     base_pid_modifier *= forecast.getValue('ultraviolet_index_actual_average')
@@ -305,15 +304,15 @@ class MqttHeatControl():
                     room['heat_history'].pop(0)
 
             # Cycle pump on daily basis
-            if pump_state or not self._last_pump_cycle or self._last_pump_cycle < datetime.now() - timedelta(days=1):
-                self._last_pump_cycle = datetime.now()
+            if pump_state or not self._last_pump_cycle or self._last_pump_cycle < now - timedelta(days=1):
+                self._last_pump_cycle = now
                 if not pump_state:
                     logging.info('Heat water pump has been off for 24 hours, we\'ll run it for 30 seconds now')
                     self._set_pump_state(True)
                     self.killer.kill_now.wait(30)
                     self._set_pump_state(False)
 
-            self.killer.kill_now.wait(self.update_freq - (datetime.now() - start).total_seconds())
+            self.killer.kill_now.wait(self.update_freq - (now - start).total_seconds())
 
     def _set_pump_state(self, state):
         logging.debug('Setting pump state to {}'.format(state))
