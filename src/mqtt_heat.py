@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 from copy import deepcopy
-from math import floor
+from math import floor, pi, sin
 import os
 import sys
 import datetime
@@ -59,17 +59,18 @@ class MqttHeatControl():
     _last_pump_cycle = None
     unique_id_suffix = '_mqttheat'
     history_hours = 12
-    weather_topic = None
-    weather_forecast_topic = None
+    weather_today_topic = None
+    weather_tomorrow_topic = None
     night_hour_start = 18
     night_adjust_factor = 225
     sunlight_adjust_factor = 180
     sunlight_offset_hours = 10
     keep_warm_modifier = 150
     keep_warm_ignore_cycles = 1
+    last_update = None
 
     config_options_mqtt = ['pump_topic', 'update_freq', 'latitude', 'longitude', 'night_hour_start', 'night_adjust_factor', 'sunlight_adjust_factor', 'sunlight_offset_hours', 'keep_warm_modifier', 'keep_warm_ignore_cycles', 'history_hours']
-    config_options = [*config_options_mqtt, 'topic_prefix', 'homeassistant_prefix', 'mqtt_server_ip', 'mqtt_server_port', 'mqtt_server_user', 'mqtt_server_password', 'rooms', 'unique_id_suffix', 'weather_topic', 'weather_forecast_topic']
+    config_options = [*config_options_mqtt, 'topic_prefix', 'homeassistant_prefix', 'mqtt_server_ip', 'mqtt_server_port', 'mqtt_server_user', 'mqtt_server_password', 'rooms', 'unique_id_suffix', 'weather_today_topic', 'weather_tomorrow_topic']
 
     def __init__(self):
         logging.basicConfig(level=os.environ.get('LOGLEVEL', 'INFO'), format='%(asctime)s;<%(levelname)s>;%(message)s')
@@ -81,8 +82,8 @@ class MqttHeatControl():
 
         self.killer = GracefulKiller()
 
-        self.weather_current = Sensor('weather')
-        self.weather_forecast = Sensor('forecast')
+        self.weather_today = Sensor('weather_today')
+        self.weather_tomorrow = Sensor('weather_tomorrow')
 
         if len(sys.argv) > 1:
             self.config_file = sys.argv[1]
@@ -101,11 +102,11 @@ class MqttHeatControl():
         for topic, sensor in self.sensors.items():
             self.mqtt_topic_map[topic] = (SENSOR_MSG, sensor)
 
-        if self.weather_topic:
-            self.mqtt_topic_map[self.weather_topic] = (SENSOR_MSG, self.weather_current)
+        if self.weather_today_topic:
+            self.mqtt_topic_map[self.weather_today_topic] = (SENSOR_MSG, self.weather_today)
 
-        if self.weather_forecast_topic:
-            self.mqtt_topic_map[self.weather_forecast_topic] = (SENSOR_MSG, self.weather_forecast)
+        if self.weather_tomorrow_topic:
+            self.mqtt_topic_map[self.weather_tomorrow_topic] = (SENSOR_MSG, self.weather_tomorrow)
 
         self.mqtt_topic_map['{}/config/set'.format(self.topic_prefix)] = (CONFIG_SET, None)
 
@@ -240,38 +241,16 @@ class MqttHeatControl():
 
             logging.info(f'Updating heating/cooling levels for {len(self.rooms)} zones')
             
-            base_pid_modifier = 0
+            night_modifier_peak_hour = 18
+            base_pid_modifier = sin((datetime.now().hour - night_modifier_peak_hour)/24*2*pi) * 10
 
-            # Apply night modifier
-            night_hour_start = self.night_hour_start
-            night_hour_end = night_hour_start+6 # default value if forecast is not available
-            if self.weather_forecast.is_connected():
-                night_hours = 1 + max(0, (12-self.weather_forecast.getValue('temperature'))*0.5)
-                if night_hours > 8:
-                    night_hour_start -= (night_hours - 8)*0.5
-                night_hour_end = night_hour_start + night_hours
-                cloud_cover = int(self.weather_forecast.getValue('clouds'))
+            forecast = self.weather_today if datetime.now().hour < 6 else self.weather_tomorrow
+            if forecast.is_connected():
+                if base_pid_modifier < 0:
+                    base_pid_modifier *= forecast.getValue('ultraviolet_index_actual_average')
 
-            if hourInRange(time.localtime().tm_hour, night_hour_start, night_hour_end):
-                adj = 1
-                if self.weather_forecast.is_connected():
-                    adj = min(1, max(0.2, (12 - self.weather_forecast.getValue('temperature')) / 18))
-                base_pid_modifier += adj*self.night_adjust_factor
-
-            logging.info('Night PID modifier: {}'.format(base_pid_modifier))
-
-            # Apply sunlight modifier
-            cloud_cover = 75 # default value if forecast is not available
-            if self.weather_forecast.is_connected():
-                cloud_cover = int(self.weather_forecast.getValue('clouds'))
-            forecast_time = (datetime.datetime.now() + datetime.timedelta(hours=self.sunlight_offset_hours)).astimezone()
-            altitude_deg = get_altitude(self.latitude, self.longitude, forecast_time)
-            sunlight = radiation.get_radiation_direct(forecast_time, altitude_deg) * (1-cloud_cover/100)
-            logging.info(f'Forecasted sunlight: {sunlight} W/m2')
-            sunlight_pid_modifier = -sunlight/1000*self.sunlight_adjust_factor
-
-            logging.info('Sunlight PID modifier: {}'.format(sunlight_pid_modifier))
-            base_pid_modifier += sunlight_pid_modifier
+                if base_pid_modifier > 0:
+                    base_pid_modifier *= min(1, max(0.2, (12 - forecast.getValue('temperature')) / 18)) * self.night_adjust_factor / 10
 
             history_len = round(self.history_hours*3600 / self.update_freq)
 
@@ -370,11 +349,11 @@ class MqttHeatControl():
             for topic in self.mqtt_topic_map.keys():
                 self.mqttclient.subscribe(topic)
 
-        if self.weather_topic:
-            self.mqttclient.subscribe(self.weather_topic)
+        if self.weather_today_topic:
+            self.mqttclient.subscribe(self.weather_today_topic)
 
-        if self.weather_forecast_topic:
-            self.mqttclient.subscribe(self.weather_forecast_topic)
+        if self.weather_tomorrow_topic:
+            self.mqttclient.subscribe(self.weather_tomorrow_topic)
 
         self.mqttclient.publish(self.availability_topic, payload='{"state": "online"}', qos=1, retain=True)
 
