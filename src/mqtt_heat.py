@@ -4,7 +4,7 @@ from copy import deepcopy
 from math import floor, pi, sin
 import os
 import sys
-import datetime
+from datetime import datetime, timedelta
 import json
 import yaml
 from statistics import mean
@@ -237,7 +237,7 @@ class MqttHeatControl():
     def main(self):
         self.killer.kill_now.wait(10)
         while not self.killer.kill_now.is_set():
-            start = datetime.datetime.now()
+            start = datetime.now()
 
             logging.info(f'Updating heating/cooling levels for {len(self.rooms)} zones')
             
@@ -305,15 +305,15 @@ class MqttHeatControl():
                     room['heat_history'].pop(0)
 
             # Cycle pump on daily basis
-            if pump_state or not self._last_pump_cycle or self._last_pump_cycle < datetime.datetime.now() - datetime.timedelta(days=1):
-                self._last_pump_cycle = datetime.datetime.now()
+            if pump_state or not self._last_pump_cycle or self._last_pump_cycle < datetime.now() - timedelta(days=1):
+                self._last_pump_cycle = datetime.now()
                 if not pump_state:
                     logging.info('Heat water pump has been off for 24 hours, we\'ll run it for 30 seconds now')
                     self._set_pump_state(True)
                     self.killer.kill_now.wait(30)
                     self._set_pump_state(False)
 
-            self.killer.kill_now.wait(self.update_freq - (datetime.datetime.now() - start).total_seconds())
+            self.killer.kill_now.wait(self.update_freq - (datetime.now() - start).total_seconds())
 
     def _set_pump_state(self, state):
         logging.debug('Setting pump state to {}'.format(state))
