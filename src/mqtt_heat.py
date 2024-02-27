@@ -311,16 +311,19 @@ class MqttHeatControl():
                 if 'output_cool_topic' in room:
                     self.mqttclient.publish(room['output_cool_topic'], payload='{:0.0f}'.format(cooling_level), qos=1, retain=True)
 
-                # Save heat history, including extra in case setting is changed
-                room['heat_history'].append(room['control'].heating_level)
-                if len(room['heat_history']) > history_len+self.keep_warm_ignore_cycles+50:
-                    room['heat_history'].pop(0)
-
             heating_levels = [r['control'].heating_level for r in self.rooms.values() if 'output_heat_topic' in r]
-            pump_state = sum(heating_levels) >= 100
+            total_heating_level = sum(heating_levels)
+            pump_state = total_heating_level >= 50
             self._set_pump_state(pump_state)
 
             self.mqtt_broadcast_state(self.room_all)
+
+            for room in self.rooms.values():
+                # Save heat history, including extra in case setting is changed
+                # If pump is not running, no heating happens
+                room['heat_history'].append(room['control'].heating_level / total_heating_level if pump_state else 0)
+                if len(room['heat_history']) > history_len+self.keep_warm_ignore_cycles+50:
+                    room['heat_history'].pop(0)
 
             # Cycle pump on daily basis
             if pump_state or not self._last_pump_cycle or self._last_pump_cycle < datetime.datetime.now() - datetime.timedelta(days=1):
