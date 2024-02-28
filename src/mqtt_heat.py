@@ -258,7 +258,7 @@ class MqttHeatControl():
 
                 # Apply keep warm modifier if the floor has been cold for a while
                 heat_history = room['heat_history'][-history_len:-self.keep_warm_ignore_cycles]
-                if (len(heat_history) >= history_len-self.keep_warm_ignore_cycles and mean(heat_history) < 100*self.update_freq/(self.history_hours*3600)):
+                if len(heat_history) >= history_len-self.keep_warm_ignore_cycles and sum(heat_history) < 50:
                     # If the average heating level over the last 'history_hours' hours is less than
                     # one cycle at 100%, let's increase the modifier to keep the floor warm
                     # Ignore N last cycles so that we get at least that many cycles of heating
@@ -299,7 +299,7 @@ class MqttHeatControl():
             for room in self.rooms.values():
                 # Save heat history, including extra in case setting is changed
                 # If pump is not running, no heating happens
-                room['heat_history'].append(room['control'].heating_level / total_heating_level if pump_state else 0)
+                room['heat_history'].append(room['control'].heating_level / total_heating_level * 100 if pump_state else 0)
                 if len(room['heat_history']) > history_len+self.keep_warm_ignore_cycles+50:
                     room['heat_history'].pop(0)
 
