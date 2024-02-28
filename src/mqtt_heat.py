@@ -251,6 +251,8 @@ class MqttHeatControl():
                 if base_pid_modifier > 0:
                     base_pid_modifier *= min(1, max(0.2, (12 - forecast.getValue('temperature_minimum')) / 18)) * self.night_adjust_factor / 10
 
+            logging.info('Base PID modifier: {}'.format(base_pid_modifier))
+
             history_len = round(self.history_hours*3600 / self.update_freq)
 
             for room in self.rooms.values():
@@ -263,6 +265,7 @@ class MqttHeatControl():
                     # one cycle at 100%, let's increase the modifier to keep the floor warm
                     # Ignore N last cycles so that we get at least that many cycles of heating
                     modifier_pid += self.keep_warm_modifier
+                    logging.debug(f'Room {room["name"]}: applying keep warm modifier (+{self.keep_warm_modifier})')
 
                 room['control'].update(modifier_pid=modifier_pid, modifier_onoff=-modifier_pid*0.005)
 
@@ -293,6 +296,7 @@ class MqttHeatControl():
             total_heating_level = sum(heating_levels)
             pump_state = total_heating_level >= 50
             self._set_pump_state(pump_state)
+            logging.debug(f'Pump state: {pump_state} (total heating level: {total_heating_level})')
 
             self.mqtt_broadcast_state(self.room_all)
 
@@ -305,14 +309,14 @@ class MqttHeatControl():
 
             # Cycle pump on daily basis
             if pump_state or not self._last_pump_cycle or self._last_pump_cycle < now - timedelta(days=1):
-                self._last_pump_cycle = now
                 if not pump_state:
                     logging.info('Heat water pump has been off for 24 hours, we\'ll run it for 30 seconds now')
                     self._set_pump_state(True)
                     self.killer.kill_now.wait(30)
                     self._set_pump_state(False)
+                self._last_pump_cycle = datetime.now()
 
-            self.killer.kill_now.wait(self.update_freq - (now - start).total_seconds())
+            self.killer.kill_now.wait(self.update_freq - (datetime.now() - start).total_seconds())
 
     def _set_pump_state(self, state):
         logging.debug('Setting pump state to {}'.format(state))
