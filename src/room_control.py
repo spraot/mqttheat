@@ -89,8 +89,8 @@ class RoomControl():
         self.pid.output_limits = (-100, 100)
 
         power = self.pid(temp, modifier=self._modifier_pid)
-        self.heating_level = 100*sqrt(0.01*max(0, power))
-        self.cooling_level = 100*sqrt(0.01*max(0, -power))
+        self.heating_level = max(0, power)
+        self.cooling_level = max(0, -power)
 
     def get_state(self):
         sensors_state = [s.is_connected() for s in self.sensors]
