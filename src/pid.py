@@ -129,7 +129,7 @@ class PID(object):
         self._last_time = now
 
         logging.debug('PID: input={}, setpoint={}, output={}, _proportional={}, _integral={}, _derivative={}',
-                      (input_, self.setpoint, output, self._proportional, self._integral, self._derivative))
+                      input_, self.setpoint, output, self._proportional, self._integral, self._derivative)
         return output
 
     def __repr__(self):
