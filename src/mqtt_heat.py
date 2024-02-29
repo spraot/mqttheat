@@ -89,13 +89,6 @@ class MqttHeatControl():
         self.configure_sensors()
         self.make_all_room()
 
-        #Construct map for fast indexing
-        for room in self.rooms.values():
-            self.mqtt_topic_map[room['mqtt_set_state_topic']] = (ROOM_STATE_SET, room)
-            self.mqtt_topic_map[room['mqtt_state_topic']] = (ROOM_STATE, room)
-            self.mqtt_topic_map[room['mqtt_mode_command_topic']] = (ROOM_MODE_SET, room)
-            self.mqtt_topic_map[room['mqtt_temp_command_topic']] = (ROOM_TEMP_SET, room)
-
         for topic, sensor in self.sensors.items():
             self.mqtt_topic_map[topic] = (SENSOR_MSG, sensor)
 
@@ -104,6 +97,13 @@ class MqttHeatControl():
 
         if self.weather_tomorrow_topic:
             self.mqtt_topic_map[self.weather_tomorrow_topic] = (SENSOR_MSG, self.weather_tomorrow)
+
+        #Construct map for fast indexing
+        for room in self.rooms.values():
+            self.mqtt_topic_map[room['mqtt_set_state_topic']] = (ROOM_STATE_SET, room)
+            self.mqtt_topic_map[room['mqtt_state_topic']] = (ROOM_STATE, room)
+            self.mqtt_topic_map[room['mqtt_mode_command_topic']] = (ROOM_MODE_SET, room)
+            self.mqtt_topic_map[room['mqtt_temp_command_topic']] = (ROOM_TEMP_SET, room)
 
         self.mqtt_topic_map['{}/config/set'.format(self.topic_prefix)] = (CONFIG_SET, None)
 
@@ -351,12 +351,6 @@ class MqttHeatControl():
             #Subsribe to MQTT room updates
             for topic in self.mqtt_topic_map.keys():
                 self.mqttclient.subscribe(topic)
-
-        if self.weather_today_topic:
-            self.mqttclient.subscribe(self.weather_today_topic)
-
-        if self.weather_tomorrow_topic:
-            self.mqttclient.subscribe(self.weather_tomorrow_topic)
 
         self.mqttclient.publish(self.availability_topic, payload='{"state": "online"}', qos=1, retain=True)
 
