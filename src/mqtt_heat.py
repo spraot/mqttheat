@@ -65,7 +65,6 @@ class MqttHeatControl():
     sunlight_offset_hours = 10
     keep_warm_modifier = 150
     keep_warm_ignore_cycles = 1
-    last_update = None
 
     config_options_mqtt = ['pump_topic', 'update_freq', 'latitude', 'longitude', 'night_hour_start', 'night_adjust_factor', 'sunlight_adjust_factor', 'sunlight_offset_hours', 'keep_warm_modifier', 'keep_warm_ignore_cycles', 'history_hours']
     config_options = [*config_options_mqtt, 'topic_prefix', 'homeassistant_prefix', 'mqtt_server_ip', 'mqtt_server_port', 'mqtt_server_user', 'mqtt_server_password', 'rooms', 'unique_id_suffix', 'weather_today_topic', 'weather_tomorrow_topic']
@@ -256,6 +255,7 @@ class MqttHeatControl():
             history_len = round(self.history_hours*3600 / self.update_freq)
 
             for room in self.rooms.values():
+                logging.debug(f'Updating room {room["name"]}')
                 modifier_pid = base_pid_modifier
 
                 # Apply keep warm modifier if the floor has been cold for a while
@@ -265,7 +265,7 @@ class MqttHeatControl():
                     # one cycle at 100%, let's increase the modifier to keep the floor warm
                     # Ignore N last cycles so that we get at least that many cycles of heating
                     modifier_pid += self.keep_warm_modifier
-                    logging.debug(f'Room {room["name"]}: applying keep warm modifier (+{self.keep_warm_modifier})')
+                    logging.debug(f'Applying keep warm modifier (+{self.keep_warm_modifier})')
 
                 room['control'].update(modifier_pid=modifier_pid, modifier_onoff=-modifier_pid*0.005)
 

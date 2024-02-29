@@ -62,7 +62,7 @@ class RoomControl():
             self._do_pid(temp)
 
         else:
-            logging.error('control type {} not valid for room {}, HVAC is disabled'.format(self.control_type, self.name))
+            logging.error('control type {} not valid for room {}, HVAC is disabled', (self.control_type, self.name))
             self.heating_level = 0
             self.cooling_level = 0
 
@@ -73,6 +73,7 @@ class RoomControl():
             self.cooling_level = 0
 
     def _do_onoff(self, temp):
+        logging.debug('doing on-off control')
         if temp+self._modifier_onoff < self.temperature:
             self.heating_level = 100
         else:
@@ -84,6 +85,7 @@ class RoomControl():
             self.cooling_level = 0
 
     def _do_pid(self, temp):
+        logging.debug('doing PID control for room {}', (self.name, ))
         self.pid.setpoint = self.temperature
         self.pid.integral_limits = (-200, 200)
         self.pid.output_limits = (-100, 100)
