@@ -59,14 +59,13 @@ class MqttHeatControl():
     history_hours = 12
     weather_today_topic = None
     weather_tomorrow_topic = None
-    night_hour_start = 18
     night_adjust_factor = 225
-    sunlight_adjust_factor = 180
-    sunlight_offset_hours = 10
     keep_warm_modifier = 150
     keep_warm_ignore_cycles = 1
+    night_modifier_peak_hour = 18
+    keep_warm_threshold = 20
 
-    config_options_mqtt = ['pump_topic', 'update_freq', 'latitude', 'longitude', 'night_hour_start', 'night_adjust_factor', 'sunlight_adjust_factor', 'sunlight_offset_hours', 'keep_warm_modifier', 'keep_warm_ignore_cycles', 'history_hours']
+    config_options_mqtt = ['pump_topic', 'update_freq', 'latitude', 'longitude', 'night_adjust_factor', 'keep_warm_modifier', 'keep_warm_ignore_cycles', 'history_hours', 'night_modifier_peak_hour', 'keep_warm_threshold']
     config_options = [*config_options_mqtt, 'topic_prefix', 'homeassistant_prefix', 'mqtt_server_ip', 'mqtt_server_port', 'mqtt_server_user', 'mqtt_server_password', 'rooms', 'unique_id_suffix', 'weather_today_topic', 'weather_tomorrow_topic']
 
     def __init__(self):
@@ -239,8 +238,8 @@ class MqttHeatControl():
 
             logging.info(f'Updating heating/cooling levels for {len(self.rooms)} zones')
             
-            night_modifier_peak_hour = 18
-            base_pid_modifier = cos((now.hour - night_modifier_peak_hour)/24*2*pi) * 10
+            base_pid_modifier_factor = 10
+            base_pid_modifier = cos((now.hour - self.night_modifier_peak_hour)/24*2*pi) * base_pid_modifier_factor
 
             forecast = self.weather_today if now.hour < 6 else self.weather_tomorrow
             if forecast.is_connected():
@@ -248,7 +247,7 @@ class MqttHeatControl():
                     base_pid_modifier *= forecast.getValue('ultraviolet_index_actual_average')
 
                 if base_pid_modifier > 0:
-                    base_pid_modifier *= min(1, max(0.2, (12 - forecast.getValue('temperature_minimum')) / 18)) * self.night_adjust_factor / 10
+                    base_pid_modifier *= min(1, max(0.2, (12 - forecast.getValue('temperature_minimum')) / 18)) * self.night_adjust_factor / base_pid_modifier_factor
 
             logging.info('Base PID modifier: {}'.format(base_pid_modifier))
 
@@ -260,7 +259,7 @@ class MqttHeatControl():
 
                 # Apply keep warm modifier if the floor has been cold for a while
                 heat_history = room['heat_history'][-history_len:-self.keep_warm_ignore_cycles]
-                if len(heat_history) >= history_len-self.keep_warm_ignore_cycles and sum(heat_history) < 50:
+                if len(heat_history) >= history_len-self.keep_warm_ignore_cycles and sum(heat_history) < self.keep_warm_threshold:
                     # If the average heating level over the last 'history_hours' hours is less than
                     # one cycle at 100%, let's increase the modifier to keep the floor warm
                     # Ignore N last cycles so that we get at least that many cycles of heating
