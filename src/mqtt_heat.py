@@ -64,8 +64,9 @@ class MqttHeatControl():
     keep_warm_ignore_cycles = 1
     night_modifier_peak_hour = 18
     keep_warm_threshold = 20
+    uv_modifier_factor = 50
 
-    config_options_mqtt = ['pump_topic', 'update_freq', 'latitude', 'longitude', 'night_adjust_factor', 'keep_warm_modifier', 'keep_warm_ignore_cycles', 'history_hours', 'night_modifier_peak_hour', 'keep_warm_threshold']
+    config_options_mqtt = ['pump_topic', 'update_freq', 'latitude', 'longitude', 'night_adjust_factor', 'keep_warm_modifier', 'keep_warm_ignore_cycles', 'history_hours', 'night_modifier_peak_hour', 'keep_warm_threshold', 'uv_modifier_factor']
     config_options = [*config_options_mqtt, 'topic_prefix', 'homeassistant_prefix', 'mqtt_server_ip', 'mqtt_server_port', 'mqtt_server_user', 'mqtt_server_password', 'rooms', 'unique_id_suffix', 'weather_today_topic', 'weather_tomorrow_topic']
 
     def __init__(self):
@@ -231,7 +232,7 @@ class MqttHeatControl():
         logging.info('started')
 
     def main(self):
-        self.killer.kill_now.wait(10)
+        self.killer.kill_now.wait(20)
         while not self.killer.kill_now.is_set():
             now = datetime.now()
             start = now
@@ -244,7 +245,7 @@ class MqttHeatControl():
             forecast = self.weather_today if now.hour < 6 else self.weather_tomorrow
             if forecast.is_connected():
                 if base_pid_modifier < 0:
-                    base_pid_modifier *= forecast.getValue('ultraviolet_index_actual_average')
+                    base_pid_modifier *= forecast.getValue('ultraviolet_index_actual_average') * self.uv_modifier_factor
 
                 if base_pid_modifier > 0:
                     base_pid_modifier *= min(1, max(0.2, (12 - forecast.getValue('temperature_minimum')) / 18)) * self.night_adjust_factor / base_pid_modifier_factor
