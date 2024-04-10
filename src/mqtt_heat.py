@@ -266,6 +266,8 @@ class MqttHeatControl():
                     modifier_pid += self.keep_warm_modifier
                     logging.debug(f'Applying keep warm modifier (+{self.keep_warm_modifier})')
 
+                modifier_pid *= room['modifier_factor'] if 'modifier_factor' in room else 1
+
                 room['control'].update(modifier_pid=modifier_pid, modifier_onoff=-modifier_pid*0.005)
 
                 try:
