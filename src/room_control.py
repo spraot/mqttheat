@@ -9,6 +9,7 @@ class RoomControl():
     cooling_level = 0
     mode = 'auto'
     control_type = 'onoff'
+    door_sensor = None
 
     def __init__(self, name, can_heat, can_cool):
         self.name = name
@@ -50,8 +51,13 @@ class RoomControl():
         self._modifier_pid = modifier_pid
         self._modifier_onoff = modifier_onoff
         temp = self.get_temperature(fallback_to_adj=True)
+        if self.door_sensor and self.door_sensor.getValue('contact') == False:
+            logging.info('Window/door is open in room {}, HVAC is disabled'.format(self.name))
+            self.heating_level = 0
+            self.cooling_level = 0
+
         if temp == None:
-            logging.debug('Temperature not found for room {}, HVAC is disabled'.format(self.name))
+            logging.error('Temperature not found for room {}, HVAC is disabled'.format(self.name))
             self.heating_level = 0
             self.cooling_level = 0
 

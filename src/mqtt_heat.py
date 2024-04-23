@@ -79,9 +79,6 @@ class MqttHeatControl():
 
         self.killer = GracefulKiller()
 
-        self.weather_today = Sensor('weather_today')
-        self.weather_tomorrow = Sensor('weather_tomorrow')
-
         if len(sys.argv) > 1:
             self.config_file = sys.argv[1]
 
@@ -89,16 +86,10 @@ class MqttHeatControl():
         self.configure_sensors()
         self.make_all_room()
 
+        #Construct topic map for fast indexing
         for topic, sensor in self.sensors.items():
             self.mqtt_topic_map[topic] = (SENSOR_MSG, sensor)
 
-        if self.weather_today_topic:
-            self.mqtt_topic_map[self.weather_today_topic] = (SENSOR_MSG, self.weather_today)
-
-        if self.weather_tomorrow_topic:
-            self.mqtt_topic_map[self.weather_tomorrow_topic] = (SENSOR_MSG, self.weather_tomorrow)
-
-        #Construct map for fast indexing
         for room in self.rooms.values():
             self.mqtt_topic_map[room['mqtt_set_state_topic']] = (ROOM_STATE_SET, room)
             self.mqtt_topic_map[room['mqtt_state_topic']] = (ROOM_STATE, room)
@@ -170,11 +161,25 @@ class MqttHeatControl():
             room['heat_history'] = []
 
     def configure_sensors(self):
+        self.weather_today = Sensor('weather_today')
+        self.weather_tomorrow = Sensor('weather_tomorrow')
+
+        if self.weather_today_topic:
+            self.sensors[self.weather_today_topic] = (SENSOR_MSG, self.weather_today)
+
+        if self.weather_tomorrow_topic:
+            self.sensors[self.weather_tomorrow_topic] = (SENSOR_MSG, self.weather_tomorrow)
+
         for room in self.rooms.values():
             for sensor_topic in room['sensors']:
                 if sensor_topic not in self.sensors:
                     self.sensors[sensor_topic] = Sensor(sensor_topic)
                 room['control'].sensors.append(self.sensors[sensor_topic])
+
+            if 'door_sensor_topic' in room:
+                if room['door_sensor_topic'] not in self.sensors:
+                    self.sensors[room['door_sensor_topic']] = Sensor(room['door_sensor_topic'])
+                room['control'].door_sensor = self.sensors[room['door_sensor_topic']]
 
     def configure_mqtt_for_room(self, room):
         room_configuration = {
