@@ -165,10 +165,10 @@ class MqttHeatControl():
         self.weather_tomorrow = Sensor('weather_tomorrow')
 
         if self.weather_today_topic:
-            self.sensors[self.weather_today_topic] = (SENSOR_MSG, self.weather_today)
+            self.sensors[self.weather_today_topic] = self.weather_today
 
         if self.weather_tomorrow_topic:
-            self.sensors[self.weather_tomorrow_topic] = (SENSOR_MSG, self.weather_tomorrow)
+            self.sensors[self.weather_tomorrow_topic] = self.weather_tomorrow
 
         for room in self.rooms.values():
             for sensor_topic in room['sensors']:
