@@ -251,7 +251,7 @@ class MqttHeatControl():
             if forecast.is_connected():
                 if base_pid_modifier > 0:
                     temp_factor = (12 - forecast.getValue('temperature_minimum')) / 18
-                    wind_factor = 1+max(0, (forecast.getValue('wind_speed')-3) / 17)
+                    wind_factor = 1+max(0, (forecast.getValue('wind_speed_max')-3) / 17)
                     base_pid_modifier *= min(1.2, max(0.2, temp_factor*wind_factor)) * self.night_adjust_factor / base_pid_modifier_factor
 
                 base_pid_modifier -= forecast.getValue('ultraviolet_index_actual_average') * self.uv_modifier_factor * base_pid_modifier_factor
