@@ -395,6 +395,9 @@ class MqttHeatControl():
                 sensor = msg_obj[1]
                 logging.debug('Received MQTT message for sensor ' + sensor.name)
                 sensor.update(json.loads(payload_as_string))
+                for room in self.rooms.values():
+                    if sensor in room['control'].sensors:
+                        self.mqtt_broadcast_state(room)
 
             if msg_obj[0] == CONFIG_SET:
                 config = json.loads(payload_as_string)
