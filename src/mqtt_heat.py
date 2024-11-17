@@ -14,9 +14,18 @@ import time
 import signal
 import threading
 import logging
+from pythonjsonlogger import jsonlogger
 import atexit
 from room_control import RoomControl
 from sensor import Sensor
+
+logger = logging.getLogger()
+logHandler = logging.StreamHandler()
+formatter = jsonlogger.JsonFormatter('%(message)%(levelname)', timestamp='dt')
+logHandler.setFormatter(formatter)
+logger.addHandler(logHandler)
+logger.setLevel(os.environ.get('LOGLEVEL', 'INFO'))
+
 ROOM_TEMP_SET = 1
 ROOM_MODE_SET = 2
 ROOM_STATE = 3
@@ -70,8 +79,7 @@ class MqttHeatControl():
     config_options = [*config_options_mqtt, 'topic_prefix', 'homeassistant_prefix', 'mqtt_server_ip', 'mqtt_server_port', 'mqtt_server_user', 'mqtt_server_password', 'rooms', 'unique_id_suffix', 'weather_today_topic', 'weather_tomorrow_topic']
 
     def __init__(self):
-        logging.basicConfig(level=os.environ.get('LOGLEVEL', 'INFO'), format='%(asctime)s;<%(levelname)s>;%(message)s')
-        logging.info('Init')
+        logger.info('Init')
 
         self.mqtt_topic_map = {}
         self.rooms = {}
@@ -98,9 +106,9 @@ class MqttHeatControl():
 
         self.mqtt_topic_map['{}/config/set'.format(self.topic_prefix)] = (CONFIG_SET, None)
 
-        logging.debug('room list: '+', '.join(self.rooms.keys()))
-        logging.debug('sensor list: '+', '.join(self.sensors.keys()))
-        logging.debug('subscribed topics list: '+', '.join(self.mqtt_topic_map.keys()))
+        logger.debug('room list: '+', '.join(self.rooms.keys()))
+        logger.debug('sensor list: '+', '.join(self.sensors.keys()))
+        logger.debug('subscribed topics list: '+', '.join(self.mqtt_topic_map.keys()))
 
         #MQTT init
         self.mqttclient = mqtt.Client()
@@ -111,10 +119,10 @@ class MqttHeatControl():
          #Register program end event
         atexit.register(self.programend)
 
-        logging.info('init done')
+        logger.info('init done')
 
     def load_config(self):
-        logging.info('Reading config from '+self.config_file)
+        logger.info('Reading config from '+self.config_file)
 
         with open(self.config_file, 'r') as f:
             self.config = yaml.safe_load(f)
@@ -217,24 +225,24 @@ class MqttHeatControl():
             room_configuration['unique_id'] = room['id']
 
         json_conf = json.dumps(room_configuration)
-        logging.debug('Broadcasting homeassistant configuration for room ' + room['name'] + ': ' + json_conf)
+        logger.debug('Broadcasting homeassistant configuration for room ' + room['name'] + ': ' + json_conf)
         self.mqttclient.publish(room['mqtt_config_topic'], payload=json_conf, qos=1, retain=True)
 
     def start(self):
-        logging.info('starting')
+        logger.info('starting')
 
         #MQTT startup
-        logging.info('Starting MQTT client')
+        logger.info('Starting MQTT client')
         self.mqttclient.username_pw_set(self.mqtt_server_user, password=self.mqtt_server_password)
         self.mqttclient.connect(self.mqtt_server_ip, self.mqtt_server_port, 60)
         self.mqttclient.loop_start()
-        logging.info('MQTT client started')
+        logger.info('MQTT client started')
 
-        logging.info('Starting main thread')
+        logger.info('Starting main thread')
         self.main_thread = threading.Thread(name='main', target=self.main)
         self.main_thread.start()
 
-        logging.info('started')
+        logger.info('started')
 
     def main(self):
         self.killer.kill_now.wait(20)
@@ -242,7 +250,7 @@ class MqttHeatControl():
             now = datetime.now()
             start = now
 
-            logging.info(f'Updating heating/cooling levels for {len(self.rooms)} zones')
+            logger.info(f'Updating heating/cooling levels for {len(self.rooms)} zones')
             
             base_pid_modifier_factor = 10
             base_pid_modifier = cos((now.hour - self.night_modifier_peak_hour)/24*2*pi) * base_pid_modifier_factor
@@ -256,12 +264,12 @@ class MqttHeatControl():
 
                 base_pid_modifier -= forecast.getValue('ultraviolet_index_actual_average') * self.uv_modifier_factor * base_pid_modifier_factor
 
-            logging.info('Base PID modifier: {}'.format(base_pid_modifier))
+            logger.info('Base PID modifier: {}'.format(base_pid_modifier))
 
             history_len = round(self.history_hours*3600 / self.update_freq)
 
             for room in self.rooms.values():
-                logging.debug(f'Updating room {room["name"]}')
+                logger.debug(f'Updating room {room["name"]}')
                 modifier_pid = base_pid_modifier
 
                 # Apply keep warm modifier if the floor has been cold for a while
@@ -271,7 +279,7 @@ class MqttHeatControl():
                     # one cycle at 100%, let's increase the modifier to keep the floor warm
                     # Ignore N last cycles so that we get at least that many cycles of heating
                     modifier_pid += self.keep_warm_modifier
-                    logging.debug(f'Applying keep warm modifier (+{self.keep_warm_modifier})')
+                    logger.debug(f'Applying keep warm modifier (+{self.keep_warm_modifier})')
 
                 modifier_pid *= room['modifier_factor'] if 'modifier_factor' in room else 1
 
@@ -286,7 +294,7 @@ class MqttHeatControl():
 
                 if room['control'].can_heat:
                     heating_level = room['control'].heating_level
-                    logging.debug('Room {}: setting heat level to {} (current temp is {})'.format(room['name'], heating_level, temp_str))    
+                    logger.debug('Room {}: setting heat level to {} (current temp is {})'.format(room['name'], heating_level, temp_str))    
                 else:
                     heating_level = 0
                 if 'output_heat_topic' in room:
@@ -294,7 +302,7 @@ class MqttHeatControl():
 
                 if room['control'].can_cool:
                     cooling_level = room['control'].cooling_level
-                    logging.debug('Room {}: setting cooling level to {} (current temp is {})'.format(room['name'], cooling_level, temp_str))
+                    logger.debug('Room {}: setting cooling level to {} (current temp is {})'.format(room['name'], cooling_level, temp_str))
                 else:
                     cooling_level = 0
                 if 'output_cool_topic' in room:
@@ -304,7 +312,7 @@ class MqttHeatControl():
             total_heating_level = sum(heating_levels)
             pump_state = total_heating_level >= 50
             self._set_pump_state(pump_state)
-            logging.debug(f'Pump state: {pump_state} (total heating level: {total_heating_level})')
+            logger.debug(f'Pump state: {pump_state} (total heating level: {total_heating_level})')
 
             self.mqtt_broadcast_state(self.room_all)
 
@@ -318,7 +326,7 @@ class MqttHeatControl():
             # Cycle pump on daily basis
             if pump_state or not self._last_pump_cycle or self._last_pump_cycle < now - timedelta(days=1):
                 if not pump_state:
-                    logging.info('Heat water pump has been off for 24 hours, we\'ll run it for 30 seconds now')
+                    logger.info('Heat water pump has been off for 24 hours, we\'ll run it for 30 seconds now')
                     self._set_pump_state(True)
                     self.killer.kill_now.wait(30)
                     self._set_pump_state(False)
@@ -327,11 +335,11 @@ class MqttHeatControl():
             self.killer.kill_now.wait(self.update_freq - (datetime.now() - start).total_seconds())
 
     def _set_pump_state(self, state):
-        logging.debug('Setting pump state to {}'.format(state))
+        logger.debug('Setting pump state to {}'.format(state))
         self.mqttclient.publish(self.pump_topic, payload='ON' if state else 'OFF', qos=1, retain=True)
 
     def programend(self):
-        logging.info('stopping')
+        logger.info('stopping')
 
         for room in self.rooms.values():
             if 'output_heat_topic' in room:
@@ -344,10 +352,10 @@ class MqttHeatControl():
         self.mqttclient.publish(self.availability_topic, payload='{"state": "offline"}', qos=1, retain=True)
         self.mqttclient.disconnect()
         time.sleep(0.5)
-        logging.info('stopped')
+        logger.info('stopped')
 
     def mqtt_on_connect(self, client, userdata, flags, rc):
-        logging.info('MQTT client connected with result code '+str(rc))
+        logger.info('MQTT client connected with result code '+str(rc))
 
         for room in self.rooms.values():
             #Configure MQTT for rooms
@@ -365,7 +373,7 @@ class MqttHeatControl():
     def mqtt_on_message(self, client, userdata, msg):
         try:
             payload_as_string = msg.payload.decode('utf-8')
-            logging.debug('Received MQTT message on topic: ' + msg.topic + ', payload: ' + payload_as_string + ', retained: ' + str(msg.retain))
+            logger.debug('Received MQTT message on topic: ' + msg.topic + ', payload: ' + payload_as_string + ', retained: ' + str(msg.retain))
 
             msg_obj = self.mqtt_topic_map[str(msg.topic)]
 
@@ -376,24 +384,24 @@ class MqttHeatControl():
                     self.mqtt_broadcast_state(room)
 
             if msg_obj[0] == ROOM_MODE_SET:
-                logging.debug('Received mode command from MQTT for room {}: {}'.format(msg_obj[1]['name'], payload_as_string))
+                logger.debug('Received mode command from MQTT for room {}: {}'.format(msg_obj[1]['name'], payload_as_string))
                 set_state(msg_obj[1], {'mode': payload_as_string})
                 
             if msg_obj[0] == ROOM_TEMP_SET:
-                logging.info('Received temperature command from MQTT for room {}: {}'.format(msg_obj[1]['name'], payload_as_string))
+                logger.info('Received temperature command from MQTT for room {}: {}'.format(msg_obj[1]['name'], payload_as_string))
                 set_state(msg_obj[1], {'set_temperature': float(payload_as_string)})
 
             if msg_obj[0] == ROOM_STATE_SET:
-                logging.info('Received state from MQTT for room {}: {}'.format(msg_obj[1]['name'], payload_as_string))
+                logger.info('Received state from MQTT for room {}: {}'.format(msg_obj[1]['name'], payload_as_string))
                 set_state(msg_obj[1], json.loads(payload_as_string))
 
             if msg_obj[0] == ROOM_STATE and msg.retain:
-                logging.info('Received retained state from MQTT for room {}: {}'.format(msg_obj[1]['name'], payload_as_string))
+                logger.info('Received retained state from MQTT for room {}: {}'.format(msg_obj[1]['name'], payload_as_string))
                 set_state(msg_obj[1], json.loads(payload_as_string), False)
 
             if msg_obj[0] == SENSOR_MSG:
                 sensor = msg_obj[1]
-                logging.debug('Received MQTT message for sensor ' + sensor.name)
+                logger.debug('Received MQTT message for sensor ' + sensor.name)
                 sensor.update(json.loads(payload_as_string))
                 for room in self.rooms.values():
                     if sensor in room['control'].sensors:
@@ -407,23 +415,23 @@ class MqttHeatControl():
                     if not (isinstance(config[key], str) or isinstance(config[key], int) or isinstance(config[key], float)):
                         raise ValueError('Cannot set config option: {} (invalid type)'.format(key))
                 for key in config:
-                    logging.info('Setting config option: {} = {}'.format(key, config[key]))
+                    logger.info('Setting config option: {} = {}'.format(key, config[key]))
                     self.__setattr__(key, config[key])
                     self.config[key] = config[key]
 
                 yaml.dump(self.config, open(self.config_file, 'w'), default_flow_style=False)
 
         except Exception as e:
-            logging.error('Encountered error: '+str(e))
+            logger.error('Encountered error: '+str(e))
 
     def mqtt_broadcast_room_availability(self, room, value):
-       logging.debug('Broadcasting MQTT message on topic: ' + room['mqtt_availability_topic'] + ', value: ' + value)
+       logger.debug('Broadcasting MQTT message on topic: ' + room['mqtt_availability_topic'] + ', value: ' + value)
        self.mqttclient.publish(room['mqtt_availability_topic'], payload=value, qos=1, retain=True)
 
     def mqtt_broadcast_state(self, room):
         topic = room['mqtt_state_topic']
         state = json.dumps(room['control'].get_state())
-        logging.debug('Broadcasting MQTT message on topic: ' + topic + ', value: ' + state)
+        logger.debug('Broadcasting MQTT message on topic: ' + topic + ', value: ' + state)
         self.mqttclient.publish(topic, payload=state, qos=1, retain=room != self.room_all)
 
     def make_all_room(self):
