@@ -1,4 +1,3 @@
-from math import sqrt
 from statistics import mean, StatisticsError
 import logging
 from pid import PID

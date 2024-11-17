@@ -7,7 +7,6 @@ import sys
 from datetime import datetime, timedelta
 import json
 import yaml
-from statistics import mean
 from threading import Event
 import paho.mqtt.client as mqtt
 import time
