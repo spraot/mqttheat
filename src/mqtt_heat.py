@@ -388,7 +388,7 @@ class MqttHeatControl():
                 
             if msg_obj[0] == ROOM_TEMP_SET:
                 logger.info('Received temperature command from MQTT for room {}: {}'.format(msg_obj[1]['name'], payload_as_string))
-                set_state(msg_obj[1], {'set_temperature': float(payload_as_string)})
+                set_state(msg_obj[1], {'temperature': payload_as_string})
 
             if msg_obj[0] == ROOM_STATE_SET:
                 logger.info('Received state from MQTT for room {}: {}'.format(msg_obj[1]['name'], payload_as_string))

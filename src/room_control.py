@@ -7,6 +7,7 @@ class RoomControl():
     heating_level = 0
     cooling_level = 0
     mode = 'auto'
+    control_types = ['onoff', 'pid']
     control_type = 'onoff'
     door_sensor = None
 
@@ -121,32 +122,53 @@ class RoomControl():
         }
         
     def set_state(self, state):
-        for key in ['mode', 'temperature', 'heating_level', 'cooling_level', 'control_type']:
+        try:
+            val = state['temperature']
+            if isinstance(val, str) and val[0] in ['+', '-']:
+                self.temperature = self.temperature + float(val)
+            else:
+                self.temperature = float(val)
+        except (KeyError, ValueError, TypeError):
+            pass
+
+        for key in ['heating_level', 'cooling_level']:
             try:
-                self.__setattr__(key, state[key])
-            except KeyError:
+                self.__setattr__(key, float(state[key]))
+            except (KeyError, ValueError, TypeError):
                 pass
 
         for key in ['pid_Kp', 'pid_Ki', 'pid_Kd', 'pid_d_tau', 'pid__integral']:
             try:
-                self.pid.__setattr__(key[4:], state[key])
-            except (KeyError, AttributeError):
+                self.pid.__setattr__(key[4:], float(state[key]))
+            except (KeyError, AttributeError, ValueError, TypeError):
                 pass
 
         try:
-            self._modifier_pid = state['pid_modifier']
-        except (KeyError, AttributeError):
-            pass
-
-        try:
-            self._modifier_onoff = state['onoff_modifier']
-        except (KeyError, AttributeError):
-            pass
-
-        try:
-            self.pid.last_output = state['heating_level'] if state['heating_level'] > 0 else -state['cooling_level']
+            if state['mode'] in self.modes:
+                self.mode = state['mode']
         except KeyError:
+            pass
+
+        try:
+            if state['control_type'] in self.control_types:
+                self.control_type = state['control_type']
+        except KeyError:
+            pass
+
+        try:
+            self._modifier_pid = float(state['pid_modifier'])
+        except (KeyError, AttributeError, ValueError, TypeError):
+            pass
+
+        try:
+            self._modifier_onoff =float(state['onoff_modifier'])
+        except (KeyError, AttributeError, ValueError, TypeError):
+            pass
+
+        try:
+            self.pid.last_output = float(state['heating_level']) if float(state['heating_level']) > 0 else -float(state['cooling_level'])
+        except (KeyError, ValueError, TypeError):
             try:
-                self.pid.last_output = -state['cooling_level'] if state['cooling_level'] > 0 else 0
-            except KeyError:
+                self.pid.last_output = -float(state['cooling_level']) if float(state['cooling_level']) > 0 else 0
+            except (KeyError, ValueError, TypeError):
                 pass
