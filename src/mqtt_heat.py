@@ -48,6 +48,15 @@ def hourInRange(hour, start, end):
         return hour >= start and hour < end
     else:
         return hour >= start or hour < end
+    
+def sat(value, min_value, max_value):
+    if value is None:
+        return None
+    if min_value is not None and value < min_value:
+        return min_value
+    if max_value is not None and value > max_value:
+        return max_value
+    return value
 
 class MqttHeatControl():
 
@@ -67,10 +76,10 @@ class MqttHeatControl():
     history_hours = 12
     weather_today_topic = None
     weather_tomorrow_topic = None
-    night_adjust_factor = 225
+    night_adjust_factor = 22.5
     keep_warm_modifier = 150
     keep_warm_ignore_cycles = 1
-    night_modifier_peak_hour = 18
+    night_modifier_peak_hour = 17
     keep_warm_threshold = 20
     uv_modifier_factor = 50
 
@@ -244,6 +253,15 @@ class MqttHeatControl():
         logger.info('started')
 
     def main(self):
+        base_pid_modifier_factor = 10
+        temp_factor_zero = 12
+        temp_factor_slope = 1/18
+        wind_factor_min = 1
+        wind_factor_zero = 3
+        wind_factor_slope = 1/17
+        night_weather_adjust_min = 0.2
+        night_weather_adjust_max = 1.2
+
         self.killer.kill_now.wait(20)
         while not self.killer.kill_now.is_set():
             now = datetime.now()
@@ -251,15 +269,17 @@ class MqttHeatControl():
 
             logger.info(f'Updating heating/cooling levels for {len(self.rooms)} zones')
             
-            base_pid_modifier_factor = 10
             base_pid_modifier = cos((now.hour - self.night_modifier_peak_hour)/24*2*pi) * base_pid_modifier_factor
 
             forecast = self.weather_today if now.hour < 6 else self.weather_tomorrow
             if forecast.is_connected():
                 if base_pid_modifier > 0:
-                    temp_factor = (12 - forecast.getValue('temperature_minimum')) / 18
-                    wind_factor = 1+max(0, (forecast.getValue('wind_speed_max')-3) / 17)
-                    base_pid_modifier *= min(1.2, max(0.2, temp_factor*wind_factor)) * self.night_adjust_factor / base_pid_modifier_factor
+                    temp_factor = temp_factor_slope * (temp_factor_zero - forecast.getValue('temperature_minimum'))
+                    wind_factor = wind_factor_min + wind_factor_slope * sat((forecast.getValue('wind_speed_max')-wind_factor_zero), 0, None)
+                    base_pid_modifier *= (
+                        sat(temp_factor*wind_factor, night_weather_adjust_min, night_weather_adjust_max)
+                        * self.night_adjust_factor
+                    )
 
                 base_pid_modifier -= forecast.getValue('ultraviolet_index_actual_average') * self.uv_modifier_factor * base_pid_modifier_factor
 
