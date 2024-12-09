@@ -332,7 +332,7 @@ class MqttHeatControl():
             radiant_heat_rooms = [r for r in self.rooms.values() if not r['name'].endswith('_ac')]
             heating_levels = [r['control'].heating_level for r in radiant_heat_rooms if 'output_heat_topic' in r]
             total_heating_level = sum(heating_levels)
-            pump_level = sat(pump_output_ramp * total_heating_level / len(radiant_heat_rooms), 0, 1)
+            pump_level = sat(pump_output_ramp * total_heating_level / len(radiant_heat_rooms), 0, 100)
             pump_state = pump_level >= minimum_pump_level
             logger.info(f'Pump state: {pump_state} ({pump_level}%, total heating level: {total_heating_level})')
 
