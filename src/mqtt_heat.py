@@ -142,6 +142,7 @@ class MqttHeatControl():
                 pass
 
         self.availability_topic = self.topic_prefix + '/bridge/state'
+        self.pump_topic = self.topic_prefix + '/pump'
 
         self.rooms = deepcopy(self.rooms)
         for id, room in self.rooms.items():
@@ -353,6 +354,8 @@ class MqttHeatControl():
 
             def seconds_left_in_cycle():
                 return self.update_freq - (datetime.now() - start).total_seconds()
+
+            self.mqttclient.publish(self.pump_topic, json.dumps({'pump_state': pump_state, 'pump_level': pump_level}))
 
             if pump_state:
                 self._last_pump_cycle = datetime.now()
