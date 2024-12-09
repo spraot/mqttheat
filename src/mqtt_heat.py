@@ -261,7 +261,7 @@ class MqttHeatControl():
         wind_factor_slope = 1/17
         night_weather_adjust_min = 0.2
         night_weather_adjust_max = 1.2
-        pump_output_ramp = 5
+        pump_output_ramp = 4
         minimum_pump_level = sat(30 / self.update_freq * 100, 0.1, 100)
 
         self.killer.kill_now.wait(20)
@@ -357,12 +357,13 @@ class MqttHeatControl():
             if pump_state:
                 self._last_pump_cycle = datetime.now()
                 if pump_level < 100:
-                    seconds = sat(seconds_left_in_cycle(), 0, 60)
+                    seconds = sat(seconds_left_in_cycle(), 0, 120)
                     while seconds > 10 and not self.killer.kill_now.is_set():
                         self._set_pump_state(True)
                         self.killer.kill_now.wait(seconds*pump_level*0.01)
                         self._set_pump_state(False)
-                        self.killer.kill_now.wait(seconds*(100-pump_level)*0.01)
+                        self.killer.kill_now.wait(seconds*(1-pump_level*0.01))
+                        seconds = sat(seconds_left_in_cycle(), 0, 120)
                 else:
                     self._set_pump_state(True)
             else:
