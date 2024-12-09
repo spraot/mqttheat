@@ -262,7 +262,7 @@ class MqttHeatControl():
         night_weather_adjust_min = 0.2
         night_weather_adjust_max = 1.2
         pump_output_ramp = 5
-        minimum_pump_level = sat(30 / self.update_freq, 0.001, 1)
+        minimum_pump_level = sat(30 / self.update_freq * 100, 0.1, 100)
 
         self.killer.kill_now.wait(20)
         while not self.killer.kill_now.is_set():
@@ -334,7 +334,7 @@ class MqttHeatControl():
             total_heating_level = sum(heating_levels)
             pump_level = sat(pump_output_ramp * total_heating_level / len(radiant_heat_rooms), 0, 100)
             pump_state = pump_level >= minimum_pump_level
-            logger.info(f'Pump state: {pump_state} ({pump_level}%, total heating level: {total_heating_level})')
+            logger.info(f'Pump state: {pump_state} ({pump_level:.0f}%, total heating level: {total_heating_level:.0f})')
 
             self.mqtt_broadcast_state(self.room_all)
 
@@ -356,13 +356,13 @@ class MqttHeatControl():
 
             if pump_state:
                 self._last_pump_cycle = datetime.now()
-                if pump_level < 1:
+                if pump_level < 100:
                     seconds = sat(seconds_left_in_cycle(), 0, 60)
                     while seconds > 10 and not self.killer.kill_now.is_set():
                         self._set_pump_state(True)
                         self.killer.kill_now.wait(seconds*pump_level*0.01)
                         self._set_pump_state(False)
-                        self.killer.kill_now.wait(seconds*(1-pump_level)*0.01)
+                        self.killer.kill_now.wait(seconds*(100-pump_level)*0.01)
                 else:
                     self._set_pump_state(True)
             else:
