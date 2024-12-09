@@ -346,7 +346,7 @@ class MqttHeatControl():
                     room['heat_history'].pop(0)
 
             # Cycle pump on daily basis
-            if not pump_state and not self._last_pump_cycle or self._last_pump_cycle < now - timedelta(days=1):
+            if not pump_state and (not self._last_pump_cycle or self._last_pump_cycle < now - timedelta(days=1)):
                 logger.info('Heat water pump has been off for 24 hours, we\'ll run it for 30 seconds now')
                 pump_state = True
                 pump_level = minimum_pump_level
