@@ -263,7 +263,9 @@ class MqttHeatControl():
         night_weather_adjust_min = 0.2
         night_weather_adjust_max = 1.2
         pump_output_ramp = 4
-        minimum_pump_level = sat(30 / self.update_freq * 100, 0.1, 100)
+        pump_total_duty_cycle = 120  # seconds
+        minimum_pump_duty_cycle = 30  # seconds
+        minimum_pump_level = sat(minimum_pump_duty_cycle / self.update_freq * 100, 0.1, 100)
 
         self.killer.kill_now.wait(20)
         while not self.killer.kill_now.is_set():
@@ -334,39 +336,37 @@ class MqttHeatControl():
             heating_levels = [r['control'].heating_level for r in radiant_heat_rooms if 'output_heat_topic' in r]
             total_heating_level = sum(heating_levels)
             pump_level = sat(pump_output_ramp * total_heating_level / len(radiant_heat_rooms), 0, 100)
-            pump_state = pump_level >= minimum_pump_level
-            logger.info(f'Pump state: {pump_state} ({pump_level:.0f}%, total heating level: {total_heating_level:.0f})')
+            logger.info(f'Pump level: {pump_level:.0f}%, total heating level: {total_heating_level:.0f}')
 
             self.mqtt_broadcast_state(self.room_all)
+
+            # Cycle pump on daily basis
+            if pump_level < minimum_pump_level and (not self._last_pump_cycle or self._last_pump_cycle < now - timedelta(days=1)):
+                logger.info(f'Heat water pump has been off for 24 hours, we\'ll run it for {minimum_pump_duty_cycle} seconds now')
+                pump_level = minimum_pump_level
 
             for room in self.rooms.values():
                 # Save heat history, including extra in case setting is changed
                 # If pump is not running, no heating happens
-                room['heat_history'].append(room['control'].heating_level / total_heating_level * 100 if pump_state else 0)
+                room['heat_history'].append(room['control'].heating_level / total_heating_level * pump_level)
                 if len(room['heat_history']) > history_len+self.keep_warm_ignore_cycles+50:
                     room['heat_history'].pop(0)
-
-            # Cycle pump on daily basis
-            if not pump_state and (not self._last_pump_cycle or self._last_pump_cycle < now - timedelta(days=1)):
-                logger.info('Heat water pump has been off for 24 hours, we\'ll run it for 30 seconds now')
-                pump_state = True
-                pump_level = minimum_pump_level
 
             def seconds_left_in_cycle():
                 return self.update_freq - (datetime.now() - start).total_seconds()
 
-            self.mqttclient.publish(self.pump_state_topic, json.dumps({'pump_state': pump_state, 'pump_level': pump_level}))
+            self.mqttclient.publish(self.pump_state_topic, json.dumps({'pump_level': pump_level}))
 
-            if pump_state:
+            if pump_level >= minimum_pump_level:
                 self._last_pump_cycle = datetime.now()
                 if pump_level < 100:
-                    seconds = sat(seconds_left_in_cycle(), 0, 120)
+                    seconds = sat(seconds_left_in_cycle(), 0, pump_total_duty_cycle)
                     while seconds > 10 and not self.killer.kill_now.is_set():
                         self._set_pump_state(True)
                         self.killer.kill_now.wait(seconds*pump_level*0.01)
                         self._set_pump_state(False)
                         self.killer.kill_now.wait(seconds*(1-pump_level*0.01))
-                        seconds = sat(seconds_left_in_cycle(), 0, 120)
+                        seconds = sat(seconds_left_in_cycle(), 0, pump_total_duty_cycle)
                 else:
                     self._set_pump_state(True)
             else:
