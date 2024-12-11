@@ -358,7 +358,7 @@ class MqttHeatControl():
             for room in self.rooms.values():
                 # Save heat history, including extra in case setting is changed
                 # If pump is not running, no heating happens
-                room['heat_history'].append(room['control'].heating_level / total_heating_level * pump_level)
+                room['heat_history'].append(room['control'].heating_level / total_heating_level * pump_level if total_heating_level else 0)
                 history_len = max(keep_warm_history_len+self.keep_warm_ignore_cycles, offset_history_len)
                 if len(room['heat_history']) > history_len+50:
                     room['heat_history'].pop(0)
