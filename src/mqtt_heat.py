@@ -311,7 +311,7 @@ class MqttHeatControl():
                 # Adjustment for heat already in the floor, but not disappated yet
                 heat_history = room['heat_history'][-offset_history_len:]
                 if len(heat_history):
-                    adj = sum(heat_history) * self.recent_heat_offset_factor
+                    adj = sum(heat_history) * 3600 / self.update_freq * self.recent_heat_offset_factor
                     modifier_pid -= adj
                     logger.debug(f'Applying adjustment for recent heating: ${adj:.0f}')
 
