@@ -73,17 +73,19 @@ class MqttHeatControl():
     update_freq = 15*60
     _last_pump_cycle = None
     unique_id_suffix = '_mqttheat'
-    history_hours = 12
+    keep_warm_history_hours = 12
+    recent_heat_offset_history_hours = 6
     weather_today_topic = None
     weather_tomorrow_topic = None
     night_adjust_factor = 22.5
-    keep_warm_modifier = 150
+    keep_warm_modifier = 175
     keep_warm_ignore_cycles = 1
-    night_modifier_peak_hour = 17
+    night_modifier_peak_hour = 16
     keep_warm_threshold = 20
     uv_modifier_factor = 50
+    recent_heat_offset_factor = 0.2
 
-    config_options_mqtt = ['pump_topic', 'update_freq', 'latitude', 'longitude', 'night_adjust_factor', 'keep_warm_modifier', 'keep_warm_ignore_cycles', 'history_hours', 'night_modifier_peak_hour', 'keep_warm_threshold', 'uv_modifier_factor']
+    config_options_mqtt = ['pump_topic', 'update_freq', 'latitude', 'longitude', 'night_adjust_factor', 'keep_warm_modifier', 'keep_warm_ignore_cycles', 'keep_warm_history_hours', 'recent_heat_offset_history_hours', 'recent_heat_offset_factor', 'night_modifier_peak_hour', 'keep_warm_threshold', 'uv_modifier_factor']
     config_options = [*config_options_mqtt, 'topic_prefix', 'homeassistant_prefix', 'mqtt_server_ip', 'mqtt_server_port', 'mqtt_server_user', 'mqtt_server_password', 'rooms', 'unique_id_suffix', 'weather_today_topic', 'weather_tomorrow_topic']
 
     def __init__(self):
@@ -290,20 +292,28 @@ class MqttHeatControl():
 
             logger.info('Base PID modifier: {}'.format(base_pid_modifier))
 
-            history_len = round(self.history_hours*3600 / self.update_freq)
+            keep_warm_history_len = round(self.keep_warm_history_hours*3600 / self.update_freq)
+            offset_history_len = round(self.recent_heat_offset_history_hours*3600 / self.update_freq)
 
             for room in self.rooms.values():
                 logger.debug(f'Updating room {room["name"]}')
                 modifier_pid = base_pid_modifier
 
                 # Apply keep warm modifier if the floor has been cold for a while
-                heat_history = room['heat_history'][-history_len:-self.keep_warm_ignore_cycles]
-                if len(heat_history) >= history_len-self.keep_warm_ignore_cycles and sum(heat_history) < self.keep_warm_threshold:
-                    # If the average heating level over the last 'history_hours' hours is less than
+                heat_history = room['heat_history'][-keep_warm_history_len:-self.keep_warm_ignore_cycles]
+                if len(heat_history) >= keep_warm_history_len-self.keep_warm_ignore_cycles and sum(heat_history) < self.keep_warm_threshold:
+                    # If the average heating level over the last 'keep_warm_history_hours' hours is less than
                     # one cycle at 100%, let's increase the modifier to keep the floor warm
                     # Ignore N last cycles so that we get at least that many cycles of heating
                     modifier_pid += self.keep_warm_modifier
                     logger.debug(f'Applying keep warm modifier (+{self.keep_warm_modifier})')
+
+                # Adjustment for heat already in the floor, but not disappated yet
+                heat_history = room['heat_history'][-offset_history_len:]
+                if len(heat_history):
+                    adj = sum(heat_history) * self.recent_heat_offset_factor
+                    modifier_pid -= adj
+                    logger.debug(f'Applying adjustment for recent heating: ${adj:.0f}')
 
                 modifier_pid *= room['modifier_factor'] if 'modifier_factor' in room else 1
 
@@ -318,7 +328,7 @@ class MqttHeatControl():
 
                 if room['control'].can_heat:
                     heating_level = room['control'].heating_level
-                    logger.debug('Room {}: setting heat level to {} (current temp is {})'.format(room['name'], heating_level, temp_str))    
+                    logger.debug('Room {}: setting heat level to {:0.0f} (current temp is {:0.1f})'.format(room['name'], heating_level, temp_str))    
                 else:
                     heating_level = 0
                 if 'output_heat_topic' in room:
@@ -326,7 +336,7 @@ class MqttHeatControl():
 
                 if room['control'].can_cool:
                     cooling_level = room['control'].cooling_level
-                    logger.debug('Room {}: setting cooling level to {} (current temp is {})'.format(room['name'], cooling_level, temp_str))
+                    logger.debug('Room {}: setting cooling level to {:0.0f} (current temp is {:0.1f})'.format(room['name'], cooling_level, temp_str))
                 else:
                     cooling_level = 0
                 if 'output_cool_topic' in room:
@@ -349,7 +359,8 @@ class MqttHeatControl():
                 # Save heat history, including extra in case setting is changed
                 # If pump is not running, no heating happens
                 room['heat_history'].append(room['control'].heating_level / total_heating_level * pump_level)
-                if len(room['heat_history']) > history_len+self.keep_warm_ignore_cycles+50:
+                history_len = max(keep_warm_history_len+self.keep_warm_ignore_cycles, offset_history_len)
+                if len(room['heat_history']) > history_len+50:
                     room['heat_history'].pop(0)
 
             def seconds_left_in_cycle():
