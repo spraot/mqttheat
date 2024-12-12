@@ -83,7 +83,7 @@ class MqttHeatControl():
     night_modifier_peak_hour = 16
     keep_warm_threshold = 20
     uv_modifier_factor = 50
-    recent_heat_offset_factor = 0.2
+    recent_heat_offset_factor = 0.15
 
     config_options_mqtt = ['pump_topic', 'update_freq', 'latitude', 'longitude', 'night_adjust_factor', 'keep_warm_modifier', 'keep_warm_ignore_cycles', 'keep_warm_history_hours', 'recent_heat_offset_history_hours', 'recent_heat_offset_factor', 'night_modifier_peak_hour', 'keep_warm_threshold', 'uv_modifier_factor']
     config_options = [*config_options_mqtt, 'topic_prefix', 'homeassistant_prefix', 'mqtt_server_ip', 'mqtt_server_port', 'mqtt_server_user', 'mqtt_server_password', 'rooms', 'unique_id_suffix', 'weather_today_topic', 'weather_tomorrow_topic']
@@ -265,7 +265,7 @@ class MqttHeatControl():
         night_weather_adjust_min = 0.2
         night_weather_adjust_max = 1.2
         pump_output_ramp = 4
-        pump_total_duty_cycle = 120  # seconds
+        pump_max_duty_cycle = 15*60  # seconds
         minimum_pump_duty_cycle = 30  # seconds
         minimum_pump_level = sat(minimum_pump_duty_cycle / self.update_freq * 100, 0.1, 100)
 
@@ -370,14 +370,14 @@ class MqttHeatControl():
 
             if pump_level >= minimum_pump_level:
                 self._last_pump_cycle = datetime.now()
-                if pump_level < 100:
-                    seconds = sat(seconds_left_in_cycle(), 0, pump_total_duty_cycle)
-                    while seconds > 10 and not self.killer.kill_now.is_set():
+                seconds = sat(seconds_left_in_cycle(), 0, pump_max_duty_cycle)
+                if seconds >= minimum_pump_duty_cycle and pump_level < 95:
+                    while seconds >= minimum_pump_duty_cycle and not self.killer.kill_now.is_set():
                         self._set_pump_state(True)
                         self.killer.kill_now.wait(seconds*pump_level*0.01)
                         self._set_pump_state(False)
                         self.killer.kill_now.wait(seconds*(1-pump_level*0.01))
-                        seconds = sat(seconds_left_in_cycle(), 0, pump_total_duty_cycle)
+                        seconds = sat(seconds_left_in_cycle(), 0, pump_max_duty_cycle)
                 else:
                     self._set_pump_state(True)
             else:
