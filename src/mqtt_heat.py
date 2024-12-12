@@ -74,7 +74,7 @@ class MqttHeatControl():
     _last_pump_cycle = None
     unique_id_suffix = '_mqttheat'
     keep_warm_history_hours = 12
-    recent_heat_offset_history_hours = 6
+    recent_heat_offset_history_hours = 8
     weather_today_topic = None
     weather_tomorrow_topic = None
     night_adjust_factor = 22.5
@@ -83,7 +83,7 @@ class MqttHeatControl():
     night_modifier_peak_hour = 16
     keep_warm_threshold = 20
     uv_modifier_factor = 50
-    recent_heat_offset_factor = 0.25
+    recent_heat_offset_factor = 15
 
     config_options_mqtt = ['pump_topic', 'update_freq', 'latitude', 'longitude', 'night_adjust_factor', 'keep_warm_modifier', 'keep_warm_ignore_cycles', 'keep_warm_history_hours', 'recent_heat_offset_history_hours', 'recent_heat_offset_factor', 'night_modifier_peak_hour', 'keep_warm_threshold', 'uv_modifier_factor']
     config_options = [*config_options_mqtt, 'topic_prefix', 'homeassistant_prefix', 'mqtt_server_ip', 'mqtt_server_port', 'mqtt_server_user', 'mqtt_server_password', 'rooms', 'unique_id_suffix', 'weather_today_topic', 'weather_tomorrow_topic']
@@ -309,9 +309,9 @@ class MqttHeatControl():
                     logger.debug(f'Applying keep warm modifier (+{self.keep_warm_modifier})')
 
                 # Adjustment for heat already in the floor, but not disappated yet
-                heat_history = room['heat_history'][-offset_history_len:]
+                heat_history = [0] * (offset_history_len - room['heat_history']) + room['heat_history'][-offset_history_len:]
                 if len(heat_history):
-                    adj = sum(heat_history) * self.update_freq * (1/3600) * self.recent_heat_offset_factor
+                    adj = sum((i+1) * x for i, x in enumerate(heat_history)) * self.recent_heat_offset_factor / offset_history_len / offset_history_len
                     modifier_pid -= adj
                     logger.debug(f'Applying adjustment for recent heating: ${adj:.0f}')
 
