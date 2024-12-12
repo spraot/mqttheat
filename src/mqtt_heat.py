@@ -290,7 +290,7 @@ class MqttHeatControl():
 
                 base_pid_modifier -= forecast.getValue('ultraviolet_index_actual_average') * self.uv_modifier_factor * base_pid_modifier_factor
 
-            logger.info('Base PID modifier: {}'.format(base_pid_modifier))
+            logger.info(f'Base PID modifier: {base_pid_modifier:.0f}')
 
             keep_warm_history_len = round(self.keep_warm_history_hours*3600 / self.update_freq)
             offset_history_len = round(self.recent_heat_offset_history_hours*3600 / self.update_freq)
