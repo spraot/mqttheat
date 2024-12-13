@@ -309,7 +309,7 @@ class MqttHeatControl():
                     logger.debug(f'Applying keep warm modifier (+{self.keep_warm_modifier})')
 
                 # Adjustment for heat already in the floor, but not disappated yet
-                heat_history = [0] * (offset_history_len - room['heat_history']) + room['heat_history'][-offset_history_len:]
+                heat_history = [0] * (offset_history_len - len(room['heat_history'])) + room['heat_history'][-offset_history_len:]
                 if len(heat_history):
                     adj = sum((i+1) * x for i, x in enumerate(heat_history)) * self.recent_heat_offset_factor / offset_history_len / offset_history_len
                     modifier_pid -= adj
