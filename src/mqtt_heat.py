@@ -77,15 +77,16 @@ class MqttHeatControl():
     recent_heat_offset_history_hours = 8
     weather_today_topic = None
     weather_tomorrow_topic = None
-    night_adjust_factor = 22.5
+    night_adjust_factor = 200
     keep_warm_modifier = 175
     keep_warm_ignore_cycles = 1
     night_modifier_peak_hour = 16
+    night_modifier_peak_width = 20  # hours
     keep_warm_threshold = 20
-    uv_modifier_factor = 50
+    uv_modifier_factor = 500
     recent_heat_offset_factor = 15
 
-    config_options_mqtt = ['pump_topic', 'update_freq', 'latitude', 'longitude', 'night_adjust_factor', 'keep_warm_modifier', 'keep_warm_ignore_cycles', 'keep_warm_history_hours', 'recent_heat_offset_history_hours', 'recent_heat_offset_factor', 'night_modifier_peak_hour', 'keep_warm_threshold', 'uv_modifier_factor']
+    config_options_mqtt = ['pump_topic', 'update_freq', 'latitude', 'longitude', 'night_adjust_factor', 'keep_warm_modifier', 'keep_warm_ignore_cycles', 'keep_warm_history_hours', 'recent_heat_offset_history_hours', 'recent_heat_offset_factor', 'night_modifier_peak_hour', 'night_modifier_peak_width', 'keep_warm_threshold', 'uv_modifier_factor']
     config_options = [*config_options_mqtt, 'topic_prefix', 'homeassistant_prefix', 'mqtt_server_ip', 'mqtt_server_port', 'mqtt_server_user', 'mqtt_server_password', 'rooms', 'unique_id_suffix', 'weather_today_topic', 'weather_tomorrow_topic']
 
     def __init__(self):
@@ -256,7 +257,6 @@ class MqttHeatControl():
         logger.info('started')
 
     def main(self):
-        base_pid_modifier_factor = 10
         temp_factor_zero = 12
         temp_factor_slope = 1/18
         wind_factor_min = 1
@@ -276,19 +276,20 @@ class MqttHeatControl():
 
             logger.info(f'Updating heating/cooling levels for {len(self.rooms)} zones')
             
-            base_pid_modifier = cos((now.hour - self.night_modifier_peak_hour)/24*2*pi) * base_pid_modifier_factor
+            now_hour = (
+                now.hour 
+                + (24 if now.hour < self.night_modifier_peak_hour - 12 else 0)
+                - (24 if now.hour > self.night_modifier_peak_hour + 12 else 0)
+            )
+            base_pid_modifier = sat(cos((now_hour - self.night_modifier_peak_hour)/self.night_modifier_peak_width*pi), 0, None) * self.night_adjust_factor
 
             forecast = self.weather_today if now.hour < 6 else self.weather_tomorrow
             if forecast.is_connected():
-                if base_pid_modifier > 0:
-                    temp_factor = temp_factor_slope * (temp_factor_zero - forecast.getValue('temperature_minimum'))
-                    wind_factor = wind_factor_min + wind_factor_slope * sat((forecast.getValue('wind_speed_max')-wind_factor_zero), 0, None)
-                    base_pid_modifier *= (
-                        sat(temp_factor*wind_factor, night_weather_adjust_min, night_weather_adjust_max)
-                        * self.night_adjust_factor
-                    )
+                temp_factor = temp_factor_slope * (temp_factor_zero - forecast.getValue('temperature_minimum'))
+                wind_factor = wind_factor_min + wind_factor_slope * sat((forecast.getValue('wind_speed_max')-wind_factor_zero), 0, None)
+                base_pid_modifier *= sat(temp_factor*wind_factor, night_weather_adjust_min, night_weather_adjust_max)
 
-                base_pid_modifier -= forecast.getValue('ultraviolet_index_actual_average') * self.uv_modifier_factor * base_pid_modifier_factor
+                base_pid_modifier -= forecast.getValue('ultraviolet_index_actual_average') * self.uv_modifier_factor
 
             logger.info(f'Base PID modifier: {base_pid_modifier:.0f}')
 
