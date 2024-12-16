@@ -147,6 +147,12 @@ class MqttHeatControl():
         self.availability_topic = self.topic_prefix + '/bridge/state'
         self.pump_state_topic = self.topic_prefix + '/pump'
 
+        if self.night_modifier_peak_hour < 0 or self.night_modifier_peak_hour >= 24:
+            raise ValueError('Invalid night_modifier_peak_hour: {}'.format(self.night_modifier_peak_hour))
+        
+        if self.night_modifier_peak_width <= 0:
+            raise ValueError('Invalid night_modifier_peak_width, must be >0')
+
         self.rooms = deepcopy(self.rooms)
         for id, room in self.rooms.items():
             room['id'] = id
