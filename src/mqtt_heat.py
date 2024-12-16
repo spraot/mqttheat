@@ -276,12 +276,15 @@ class MqttHeatControl():
 
             logger.info(f'Updating heating/cooling levels for {len(self.rooms)} zones')
             
-            now_hour = (
-                now.hour 
-                + (24 if now.hour < self.night_modifier_peak_hour - 12 else 0)
-                - (24 if now.hour > self.night_modifier_peak_hour + 12 else 0)
+            peak_hour = (now.hour - self.night_modifier_peak_hour)/self.night_modifier_peak_width
+            peak_hour += (
+                + (2 if now.hour < -1 else 0)
+                - (2 if now.hour > 1 else 0)
             )
-            base_pid_modifier = sat(cos((now_hour - self.night_modifier_peak_hour)/self.night_modifier_peak_width*pi), 0, None) * self.night_adjust_factor
+            if -1/2 < peak_hour < 1/2:
+                base_pid_modifier = sat(cos(peak_hour*pi), 0, None) * self.night_adjust_factor
+            else:
+                base_pid_modifier = 0
 
             forecast = self.weather_today if now.hour < 6 else self.weather_tomorrow
             if forecast.is_connected():
