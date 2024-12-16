@@ -74,17 +74,17 @@ class MqttHeatControl():
     _last_pump_cycle = None
     unique_id_suffix = '_mqttheat'
     keep_warm_history_hours = 12
-    recent_heat_offset_history_hours = 8
+    recent_heat_offset_history_hours = 10
     weather_today_topic = None
     weather_tomorrow_topic = None
-    night_adjust_factor = 200
+    night_adjust_factor = 150
     keep_warm_modifier = 175
     keep_warm_ignore_cycles = 1
-    night_modifier_peak_hour = 16
-    night_modifier_peak_width = 20  # hours
+    night_modifier_peak_hour = 18
+    night_modifier_peak_width = 16  # hours
     keep_warm_threshold = 20
     uv_modifier_factor = 500
-    recent_heat_offset_factor = 15
+    recent_heat_offset_factor = 20
 
     config_options_mqtt = ['pump_topic', 'update_freq', 'latitude', 'longitude', 'night_adjust_factor', 'keep_warm_modifier', 'keep_warm_ignore_cycles', 'keep_warm_history_hours', 'recent_heat_offset_history_hours', 'recent_heat_offset_factor', 'night_modifier_peak_hour', 'night_modifier_peak_width', 'keep_warm_threshold', 'uv_modifier_factor']
     config_options = [*config_options_mqtt, 'topic_prefix', 'homeassistant_prefix', 'mqtt_server_ip', 'mqtt_server_port', 'mqtt_server_user', 'mqtt_server_password', 'rooms', 'unique_id_suffix', 'weather_today_topic', 'weather_tomorrow_topic']
