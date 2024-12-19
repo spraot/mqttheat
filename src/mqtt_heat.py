@@ -284,8 +284,8 @@ class MqttHeatControl():
             
             peak_hour = (now.hour - self.night_modifier_peak_hour)/self.night_modifier_peak_width
             peak_hour += (
-                + (2 if now.hour < -1 else 0)
-                - (2 if now.hour > 1 else 0)
+                + (2 if peak_hour < -1 else 0)
+                - (2 if peak_hour > 1 else 0)
             )
             if -1/2 < peak_hour < 1/2:
                 base_pid_modifier = sat(cos(peak_hour*pi), 0, None) * self.night_adjust_factor
