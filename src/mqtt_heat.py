@@ -294,7 +294,7 @@ class MqttHeatControl():
             else:
                 base_pid_modifier = 0
 
-            forecast = self.weather_today if now.hour < 6 else self.weather_tomorrow
+            forecast = self.weather_today if now.hour <= 12 else self.weather_tomorrow
             if forecast.is_connected():
                 temp_factor = temp_factor_slope * (temp_factor_zero - forecast.getValue('temperature_minimum'))
                 wind_factor = wind_factor_min + wind_factor_slope * sat((forecast.getValue('wind_speed_max')-wind_factor_zero), 0, None)
@@ -428,7 +428,7 @@ class MqttHeatControl():
 
             #Subsribe to MQTT room updates
             for topic in self.mqtt_topic_map.keys():
-                self.mqttclient.subscribe(topic)
+                self.mqttclient.subscribe(topic, qos=2)
 
         self.mqttclient.publish(self.availability_topic, payload='{"state": "online"}', qos=1, retain=True)
 
@@ -494,7 +494,7 @@ class MqttHeatControl():
         topic = room['mqtt_state_topic']
         state = json.dumps(room['control'].get_state())
         logger.debug('Broadcasting MQTT message on topic: ' + topic + ', value: ' + state)
-        self.mqttclient.publish(topic, payload=state, qos=1, retain=room != self.room_all)
+        self.mqttclient.publish(topic, payload=state, qos=2, retain=room != self.room_all)
 
     def make_all_room(self):
         class AllRooms():
