@@ -50,6 +50,8 @@ def hourInRange(hour, start, end):
         return hour >= start or hour < end
     
 def sat(value, min_value, max_value):
+    if min_value is not None and max_value is not None and min_value > max_value:
+        raise ValueError('min value larger than max value')
     if value is None:
         return None
     if min_value is not None and value < min_value:
@@ -74,7 +76,7 @@ class MqttHeatControl():
     _last_pump_cycle = None
     unique_id_suffix = '_mqttheat'
     keep_warm_history_hours = 12
-    recent_heat_offset_history_hours = 10
+    recent_heat_offset_history_hours = 12
     weather_today_topic = None
     weather_tomorrow_topic = None
     night_adjust_factor = 150
@@ -84,7 +86,7 @@ class MqttHeatControl():
     night_modifier_peak_width = 16  # hours
     keep_warm_threshold = 20
     uv_modifier_factor = 500
-    recent_heat_offset_factor = 20
+    recent_heat_offset_factor = 25
 
     config_options_mqtt = ['pump_topic', 'update_freq', 'latitude', 'longitude', 'night_adjust_factor', 'keep_warm_modifier', 'keep_warm_ignore_cycles', 'keep_warm_history_hours', 'recent_heat_offset_history_hours', 'recent_heat_offset_factor', 'night_modifier_peak_hour', 'night_modifier_peak_width', 'keep_warm_threshold', 'uv_modifier_factor']
     config_options = [*config_options_mqtt, 'topic_prefix', 'homeassistant_prefix', 'mqtt_server_ip', 'mqtt_server_port', 'mqtt_server_user', 'mqtt_server_password', 'rooms', 'unique_id_suffix', 'weather_today_topic', 'weather_tomorrow_topic']
@@ -297,8 +299,7 @@ class MqttHeatControl():
                 temp_factor = temp_factor_slope * (temp_factor_zero - forecast.getValue('temperature_minimum'))
                 wind_factor = wind_factor_min + wind_factor_slope * sat((forecast.getValue('wind_speed_max')-wind_factor_zero), 0, None)
                 base_pid_modifier *= sat(temp_factor*wind_factor, night_weather_adjust_min, night_weather_adjust_max)
-
-                base_pid_modifier -= forecast.getValue('ultraviolet_index_actual_average') * self.uv_modifier_factor
+                base_pid_modifier += -forecast.getValue('ultraviolet_index_actual_average') * self.uv_modifier_factor
 
             logger.info(f'Base PID modifier: {base_pid_modifier:.0f}')
 
