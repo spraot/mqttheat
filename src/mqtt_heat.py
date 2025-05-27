@@ -80,7 +80,7 @@ class MqttHeatControl():
     weather_today_topic = None
     weather_tomorrow_topic = None
     night_adjust_factor = 150
-    keep_warm_modifier = 175
+    keep_warm_modifier = 275
     keep_warm_ignore_cycles = 1
     night_modifier_peak_hour = 18
     night_modifier_peak_width = 16  # hours
@@ -265,8 +265,9 @@ class MqttHeatControl():
         logger.info('started')
 
     def main(self):
-        temp_factor_zero = 12
-        temp_factor_slope = 1/18
+        temp_factor_cold_cutoff = 8
+        temp_factor_hot_cutoff = 12
+        temp_factor_slope = 1/12
         wind_factor_min = 1
         wind_factor_zero = 3
         wind_factor_slope = 1/17
@@ -276,6 +277,7 @@ class MqttHeatControl():
         pump_max_duty_cycle = 15*60  # seconds
         minimum_pump_duty_cycle = 30  # seconds
         minimum_pump_level = sat(minimum_pump_duty_cycle / self.update_freq * 100, 0.1, 100)
+        use_tomorrows_forecast_cutoff_hour = 12
 
         self.killer.kill_now.wait(20)
         while not self.killer.kill_now.is_set():
@@ -294,12 +296,14 @@ class MqttHeatControl():
             else:
                 base_pid_modifier = 0
 
-            forecast = self.weather_today if now.hour <= 12 else self.weather_tomorrow
+            forecast = self.weather_today if now.hour <= use_tomorrows_forecast_cutoff_hour else self.weather_tomorrow
             if forecast.is_connected():
-                temp_factor = temp_factor_slope * (temp_factor_zero - forecast.getValue('temperature_minimum'))
+                temp_factor = temp_factor_slope * (temp_factor_cold_cutoff - forecast.getValue('temperature_minimum'))
                 wind_factor = wind_factor_min + wind_factor_slope * sat((forecast.getValue('wind_speed_max')-wind_factor_zero), 0, None)
                 base_pid_modifier *= sat(temp_factor*wind_factor, night_weather_adjust_min, night_weather_adjust_max)
                 base_pid_modifier += -forecast.getValue('ultraviolet_index_actual_average') * self.uv_modifier_factor
+
+                base_pid_modifier -= sat(temp_factor_slope * (forecast.getValue('temperature_maximum') - temp_factor_hot_cutoff) * self.night_adjust_factor, 0, None)
 
             logger.info(f'Base PID modifier: {base_pid_modifier:.0f}')
 
