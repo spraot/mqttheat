@@ -266,7 +266,7 @@ class MqttHeatControl():
 
     def main(self):
         temp_factor_cold_cutoff = 8
-        temp_factor_hot_cutoff = 12
+        temp_factor_hot_cutoff = 8
         temp_factor_slope = 1/12
         wind_factor_min = 1
         wind_factor_zero = 3
