@@ -122,10 +122,12 @@ class RoomControl():
         }
         
     def set_state(self, state):
+        do_update = False
         try:
             val = state['temperature']
             if isinstance(val, str) and val[0] in ['+', '-']:
                 self.temperature = self.temperature + float(val)
+                do_update = True
             else:
                 self.temperature = float(val)
         except (KeyError, ValueError, TypeError):
@@ -140,35 +142,46 @@ class RoomControl():
         for key in ['pid_Kp', 'pid_Ki', 'pid_Kd', 'pid_d_tau', 'pid__integral']:
             try:
                 self.pid.__setattr__(key[4:], float(state[key]))
+                do_update = True
             except (KeyError, AttributeError, ValueError, TypeError):
                 pass
 
         try:
             if state['mode'] in self.modes:
                 self.mode = state['mode']
+                do_update = True
         except KeyError:
             pass
 
         try:
             if state['control_type'] in self.control_types:
                 self.control_type = state['control_type']
+                do_update = True
         except KeyError:
             pass
 
         try:
             self._modifier_pid = float(state['pid_modifier'])
+            do_update = True
         except (KeyError, AttributeError, ValueError, TypeError):
             pass
 
         try:
             self._modifier_onoff =float(state['onoff_modifier'])
+            do_update = True
         except (KeyError, AttributeError, ValueError, TypeError):
             pass
 
         try:
             self.pid.last_output = float(state['heating_level']) if float(state['heating_level']) > 0 else -float(state['cooling_level'])
+            do_update = True
         except (KeyError, ValueError, TypeError):
             try:
                 self.pid.last_output = -float(state['cooling_level']) if float(state['cooling_level']) > 0 else 0
+                do_update = True
             except (KeyError, ValueError, TypeError):
                 pass
+
+        if do_update:
+            self.update()
+            
