@@ -225,8 +225,8 @@ class MqttHeatControl():
             'temp_step': 0.1,
             'initial': 22.5,
             "availability": [
-                {'topic': self.availability_topic, 'value_template': '{{ value_jason.state }}'},
-                {'topic': room["mqtt_availability_topic"], 'value_template': '{{ value_jason.state }}'},
+                {'topic': self.availability_topic, 'value_template': '{{ value_json.state }}'},
+                {'topic': room["mqtt_availability_topic"], 'value_template': '{{ value_json.state }}'},
             ],
             "device": {
                 "identifiers": [room["unique_id"]],
