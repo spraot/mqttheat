@@ -147,6 +147,7 @@ class MqttHeatControl():
                 pass
 
         self.availability_topic = self.topic_prefix + '/bridge/state'
+        self.homeassistant_status_topic = '{}/status'.format(self.homeassistant_prefix)
         self.pump_state_topic = self.topic_prefix + '/pump'
 
         if self.night_modifier_peak_hour < 0 or self.night_modifier_peak_hour >= 24:
@@ -434,12 +435,22 @@ class MqttHeatControl():
             for topic in self.mqtt_topic_map.keys():
                 self.mqttclient.subscribe(topic, qos=2)
 
+        # Re-announce discovery when Home Assistant restarts (birth message).
+        self.mqttclient.subscribe(self.homeassistant_status_topic, qos=2)
+
         self.mqttclient.publish(self.availability_topic, payload='{"state": "online"}', qos=1, retain=True)
 
     def mqtt_on_message(self, client, userdata, msg):
         try:
             payload_as_string = msg.payload.decode('utf-8')
             logger.debug('Received MQTT message on topic: ' + msg.topic + ', payload: ' + payload_as_string + ', retained: ' + str(msg.retain))
+
+            if str(msg.topic) == self.homeassistant_status_topic:
+                if payload_as_string == 'online':
+                    logger.info('Home Assistant online — re-announcing discovery configs')
+                    for room in self.rooms.values():
+                        self.configure_mqtt_for_room(room)
+                return
 
             msg_obj = self.mqtt_topic_map[str(msg.topic)]
 
