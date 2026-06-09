@@ -148,6 +148,11 @@ class MqttHeatControl():
 
         self.availability_topic = self.topic_prefix + '/bridge/state'
         self.homeassistant_status_topic = '{}/status'.format(self.homeassistant_prefix)
+        # Stale-config cleanup (approach A): mqttheat only publishes climate
+        # configs, so scanning that one namespace finds any left by a past
+        # unique_id and keeps the ACL read tight.
+        self.discovery_config_wildcard = '{}/climate/+/config'.format(self.homeassistant_prefix)
+        self._discovery_scan = None
         self.pump_state_topic = self.topic_prefix + '/pump'
 
         if self.night_modifier_peak_hour < 0 or self.night_modifier_peak_hour >= 24:
@@ -234,8 +239,9 @@ class MqttHeatControl():
                 "manufacturer": "KUNBUS GmbH",
                 "model": "RevPi Digital IO",
                 "name": room['name'],
-                "sw_version": "mqttio"
+                "sw_version": "mqttheat"
             },
+            "origin": {"name": "mqttheat"},
             'modes': room['control'].modes,
             "unique_id": room["unique_id"]
         }
@@ -248,6 +254,33 @@ class MqttHeatControl():
         json_conf = json.dumps(room_configuration)
         logger.debug('Broadcasting homeassistant configuration for room ' + room['name'] + ': ' + json_conf)
         self.mqttclient.publish(room['mqtt_config_topic'], payload=json_conf, qos=1, retain=True)
+
+    def _start_discovery_cleanup(self):
+        # Approach A — broker is the source of truth for what discovery configs
+        # exist. Collect retained configs in our namespace for a short window,
+        # then clear any that are ours (origin.name) but no longer desired.
+        self._discovery_scan = {}
+        self.mqttclient.subscribe(self.discovery_config_wildcard)
+        threading.Timer(3.0, self._finish_discovery_cleanup).start()
+
+    def _finish_discovery_cleanup(self):
+        scan, self._discovery_scan = self._discovery_scan, None
+        self.mqttclient.unsubscribe(self.discovery_config_wildcard)
+        if not scan:
+            return
+        desired = {room['mqtt_config_topic'] for room in self.rooms.values()}
+        for topic, payload in scan.items():
+            if topic in desired or not payload:
+                continue
+            try:
+                conf = json.loads(payload)
+            except ValueError:
+                continue
+            # Only ever clear configs we published — never another integration's.
+            if conf.get('origin', {}).get('name') != 'mqttheat':
+                continue
+            logger.info('Clearing stale discovery config: ' + topic)
+            self.mqttclient.publish(topic, payload='', qos=1, retain=True)
 
     def start(self):
         logger.info('starting')
@@ -440,10 +473,18 @@ class MqttHeatControl():
 
         self.mqttclient.publish(self.availability_topic, payload='{"state": "online"}', qos=1, retain=True)
 
+        # Clear discovery configs left behind by past unique_ids.
+        self._start_discovery_cleanup()
+
     def mqtt_on_message(self, client, userdata, msg):
         try:
             payload_as_string = msg.payload.decode('utf-8')
             logger.debug('Received MQTT message on topic: ' + msg.topic + ', payload: ' + payload_as_string + ', retained: ' + str(msg.retain))
+
+            # During a cleanup scan, collect retained discovery configs.
+            if self._discovery_scan is not None and msg.retain and str(msg.topic).endswith('/config'):
+                self._discovery_scan[str(msg.topic)] = payload_as_string
+                return
 
             if str(msg.topic) == self.homeassistant_status_topic:
                 if payload_as_string == 'online':
